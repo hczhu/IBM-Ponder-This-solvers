@@ -1,3 +1,7 @@
+/*
+  Source code for the puzzle
+  https://research.ibm.com/haifa/ponderthis/challenges/January2022.html
+*/
 #include <algorithm>
 #include <iostream>
 #include <iterator>

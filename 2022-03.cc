@@ -1,3 +1,7 @@
+/*
+  Source code for the puzzle
+  https://research.ibm.com/haifa/ponderthis/challenges/March2022.html
+*/
 #include <algorithm>
 #include <atomic>
 #include <iostream>
@@ -71,9 +75,7 @@ public:
     LOG(INFO) << "Initialized the prime number table of size " << high;
   }
 
-  ~PrimeNumberGen() {
-    delete notPrime_;
-  }
+  ~PrimeNumberGen() { delete[] notPrime_; }
 
   struct Itr {
     bool* ptr = nullptr;
