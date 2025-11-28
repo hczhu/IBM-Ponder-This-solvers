@@ -70,9 +70,10 @@ answer = [
 
 output = [Index('y'), Index('z'), Index('s'), Index('t')]
 
-print '\n'.join(answer)
+print('\n'.join(answer))
 
-print ' '.join(str(idx) for idx in output)
+print(' '.join(str(idx) for idx in output))
+
 
 
 def evaluate(x):
