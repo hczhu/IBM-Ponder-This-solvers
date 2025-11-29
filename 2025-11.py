@@ -1,5 +1,7 @@
-from typing import Tuple
-from typing import Self
+# Source code for the puzzle
+# https://research.ibm.com/haifa/ponderthis/challenges/November2025.html
+
+from typing import Tuple, Self
 
 class Matrix:
     """

@@ -1,4 +1,8 @@
 """
+
+Source code for the puzzle
+https://research.ibm.com/haifa/ponderthis/challenges/May2025.html
+
 This Python script is written by OpenAI o4-mini with the prompt:
 
 A test has 10 multiple selection questions. Each question has 4 selections. 10 students took the test. Their answers and scores are below. What are the answer to each question?
