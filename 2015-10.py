@@ -1,5 +1,9 @@
 #!/usr/bin/python
 
+# Source code for the puzzle
+# https://research.ibm.com/haifa/ponderthis/challenges/October2015.html
+
+import itertools
 def CountBits(x):
   res = 0
   while x > 0:

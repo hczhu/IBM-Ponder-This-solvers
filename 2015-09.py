@@ -1,5 +1,6 @@
 #!/usr/bin/python
-
+# Source code for the puzzle
+# https://research.ibm.com/haifa/ponderthis/challenges/September2015.html
 import itertools
 
 def verify(teams, N):
