@@ -7,26 +7,26 @@
 // Tests
 TEST(PrimeNumberGenTest, SmallRange) {
     PrimeNumberGen pg(1, 20);
-    std::vector<int> primes;
-    for (int p : pg) {
+    std::vector<uint64_t> primes;
+    for (uint64_t p : pg) {
         primes.push_back(p);
     }
-    std::vector<int> expected = {2, 3, 5, 7, 11, 13, 17, 19};
+    std::vector<uint64_t> expected = {2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL};
     EXPECT_EQ(primes, expected);
 }
 
 TEST(PrimeNumberGenTest, RangeWithStart) {
     PrimeNumberGen pg(10, 30);
-    std::vector<int> primes;
-    for (int p : pg) {
+    std::vector<uint64_t> primes;
+    for (uint64_t p : pg) {
         primes.push_back(p);
     }
-    std::vector<int> expected = {11, 13, 17, 19, 23, 29};
+    std::vector<uint64_t> expected = {11ULL, 13ULL, 17ULL, 19ULL, 23ULL, 29ULL};
     EXPECT_EQ(primes, expected);
 }
 
 TEST(PrimeNumberGenTest, CountPrimes) {
-    // Count primes up to 1000. There are 168 primes.
+    // Count primes less than 1000. There are 168 primes.
     PrimeNumberGen pg(1, 1000);
     int count = 0;
     for (auto p : pg) {
