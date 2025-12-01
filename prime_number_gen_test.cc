@@ -48,31 +48,21 @@ TEST(PrimeNumberGenTest, LargeRangeCount) {
 }
 
 // Benchmarks
-static void BM_PrimeGenConstructionSmall(benchmark::State& state) {
+static void BM_PrimeGenConstruction(benchmark::State& state) {
   for (auto _ : state) {
-    PrimeNumberGen pg(1, 1000);
+    PrimeNumberGen pg(1, 1000000000ULL);
     benchmark::DoNotOptimize(pg);
   }
 }
-BENCHMARK(BM_PrimeGenConstructionSmall);
+BENCHMARK(BM_PrimeGenConstruction)->Unit(benchmark::kMillisecond);
 
 static void BM_PrimeGenConstructionLarge(benchmark::State& state) {
   for (auto _ : state) {
-    PrimeNumberGen pg(1, 1000000);
+    PrimeNumberGen pg(1, 10000000000ULL);
     benchmark::DoNotOptimize(pg);
   }
 }
-BENCHMARK(BM_PrimeGenConstructionLarge);
-
-static void BM_PrimeGenIteration(benchmark::State& state) {
-  PrimeNumberGen pg(1, 1000000);
-  for (auto _ : state) {
-    for (auto p : pg) {
-      benchmark::DoNotOptimize(p);
-    }
-  }
-}
-BENCHMARK(BM_PrimeGenIteration);
+BENCHMARK(BM_PrimeGenConstructionLarge)->Unit(benchmark::kMillisecond);
 
 int main(int argc, char** argv) {
     testing::InitGoogleTest(&argc, argv);

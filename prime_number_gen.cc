@@ -31,7 +31,7 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
       notPrime_[n] = true;
     }
   }
-  // #pragma omp parallel for schedule(static, 1)
+  // #pragma omp parallel for schedule(dynamic, 7)
   for (uint64_t p = 2; p <= sqrtHigh; ++p) {
     if (notPrime_[p]) {
       continue;
