@@ -37,7 +37,7 @@ TEST(PrimeNumberGenTest, CountPrimes) {
 }
 
 TEST(PrimeNumberGenTest, LargeRangeCount) {
-    // Count primes up to 100,000. There are 9592 primes.
+    // Count primes less than 100,000. There are 9592 primes.
     PrimeNumberGen pg(1, 100000);
     int count = 0;
     for (auto p : pg) {
