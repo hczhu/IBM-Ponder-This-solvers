@@ -2,13 +2,13 @@
 #include <algorithm>
 #include <glog/logging.h>
 
-PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high) : low_(low), high_(high) {
+PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
+    : low_(low), high_(high) {
   CHECK_GT(high, low);
   CHECK_GT(low, 0u);
   DLOG(INFO) << "Initing the prime number table of size " << high;
 
-  // Allocate bit vector: (high + 1) bits, stored in uint64_t words
-  arraySize_ = (high + 64) / 64; // ceiling division
+  arraySize_ = high / 64 + 2; // ceiling division
   notPrime_ = new uint64_t[arraySize_];
   std::fill(notPrime_, notPrime_ + arraySize_, 0ULL);
 
@@ -32,9 +32,10 @@ PrimeNumberGen::~PrimeNumberGen() { delete[] notPrime_; }
 uint64_t PrimeNumberGen::Itr::operator*() const { return current; }
 
 const PrimeNumberGen::Itr& PrimeNumberGen::Itr::operator++() {
+  // It will eventually hit the sentinel, high_ + 1.
   do {
     ++current;
-  } while (current < end_val && gen->isNotPrime(current));
+  } while (gen->isNotPrime(current));
   return *this;
 }
 
@@ -46,10 +47,9 @@ PrimeNumberGen::Itr PrimeNumberGen::begin() const {
   Itr b{
       .gen = this,
       .current = low_,
-      .end_val = high_,
   };
-  while (b.current < b.end_val && isNotPrime(b.current)) {
-    // Not a prime
+  // It may hit the sentinel, high_ + 1.
+  while (isNotPrime(b.current)) {
     b.current++;
   }
   return b;
@@ -58,7 +58,8 @@ PrimeNumberGen::Itr PrimeNumberGen::begin() const {
 PrimeNumberGen::Itr PrimeNumberGen::end() const {
   return Itr{
       .gen = this,
-      .current = high_,
-      .end_val = high_,
+      // This is a sentinel value beyond the end and is declared a prime number
+      // (not always true).
+      .current = high_ + 1,
   };
 }

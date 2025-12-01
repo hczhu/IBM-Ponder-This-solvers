@@ -26,7 +26,6 @@ public:
   struct Itr {
     const PrimeNumberGen* gen = nullptr;
     uint64_t current = 0;
-    uint64_t end_val = 0;
     uint64_t operator*() const;
     const Itr& operator++();
     bool operator==(const Itr rhs) const;
