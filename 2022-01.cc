@@ -163,6 +163,10 @@ void doSearch(int n, int circle[], int p, int bm, int score, const int edgeCnt[]
     return;
   }
 
+  if (p >= N) {
+    return; // Safety check to prevent out-of-bounds access
+  }
+
   for (int d = 0; d < W; ++d) {
     if (((1<<d) & bm) == 0) {
       continue;
