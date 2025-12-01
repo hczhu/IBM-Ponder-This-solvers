@@ -18,6 +18,10 @@ private:
 public:
   PrimeNumberGen(uint64_t low, uint64_t high);
   ~PrimeNumberGen();
+  PrimeNumberGen(const PrimeNumberGen&) = delete;
+  PrimeNumberGen& operator=(const PrimeNumberGen&) = delete;
+  PrimeNumberGen(PrimeNumberGen&&) = delete;
+  PrimeNumberGen& operator=(PrimeNumberGen&&) = delete;
 
   bool isNotPrime(uint64_t n) const {
     return (notPrime_[wordIndex(n)] >> bitIndex(n)) & 1;
