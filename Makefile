@@ -7,7 +7,8 @@ BINS := $(SRCS_CC:.cc=.bin) $(SRCS_CPP:.cpp=.bin) prime_number_gen_test.bin
 
 all: $(BINS)
 
-# Specific rule for 2022-03.bin which depends on prime_number_gen.cc
+# Special rule for 2022-03.bin: this binary requires both 2022-03.cc and prime_number_gen.cc to be compiled and linked together.
+# The generic pattern rule does not handle this dependency, so we specify it explicitly here.
 2022-03.bin: 2022-03.cc prime_number_gen.cc
 	g++ $^ -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
 
