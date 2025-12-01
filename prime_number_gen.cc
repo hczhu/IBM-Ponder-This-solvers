@@ -10,9 +10,9 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
   DLOG(INFO) << "Initing the prime number table of size " << high;
 
   // Allocate bit vector: (high + 2) bits for sentinel, stored in uint64_t words
-  arraySize_ = high / 64 + 2;
   // Use a bit vector to reduce memory usage. Memory access is the bottleneck.
-  notPrime_ = new uint64_t[arraySize_]();
+  uint64_t arraySize = high / 64 + 2;
+  notPrime_.resize(arraySize, 0);
 
   // 0 and 1 are not prime
   setNotPrime(0);
@@ -36,7 +36,7 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
   DLOG(INFO) << "Initialized the prime number table of size " << high;
 }
 
-PrimeNumberGen::~PrimeNumberGen() { delete[] notPrime_; }
+PrimeNumberGen::~PrimeNumberGen() = default;
 
 uint64_t PrimeNumberGen::Itr::operator*() const { return current; }
 

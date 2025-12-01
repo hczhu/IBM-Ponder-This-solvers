@@ -152,24 +152,47 @@ TEST(PuzzleTest, SmallValues) {
 }
 
 uint64_t solve(uint64_t n) {
+  // Get the first n odd primes to estimate the upper bound for the sieve
   const auto smallPrimes = getFirstNOddPrimes(n);
+  // The maximum possible sum we need to check is the largest prime + largest even number (2n)
   uint64_t maxSum = smallPrimes.back() + n * 2;
+  
+  // Generate primes up to maxSum using the sieve
   PrimeNumberGen primeGen(3, maxSum);
   std::vector<uint64_t> primes;
   for (uint64_t p : primeGen) {
     primes.push_back(p);
   }
   LOG(INFO) << "There are " << primes.size() << " primes up to " << maxSum;
+  
   uint64_t count = 0;
-  int l = 0;
+  int l = 0; // Index in primes vector such that primes[i] - primes[l] <= 2n
+  
+  // Iterate through all primes that could be a sum of an odd prime and an even number
   for (int i = 1; i < primes.size(); ++i) {
     auto p = primes[i];
+    
+    // We are looking for solutions to p = prime + even
+    // where prime is the l-th odd prime (primes[l]) and even is 2*k (1 <= k <= n)
+    // So p - primes[l] = 2*k <= 2*n
+    // This means we need primes[l] >= p - 2*n
+    
+    // Adjust l to satisfy the condition p - primes[l] <= 2n
     while (l < n && p - primes[l] > n * 2) {
       ++l;
     }
-    count += (std::min(uint64_t(i), n) - l);
+    
+    // The number of valid pairs for this prime sum 'p' is the number of odd primes
+    // in the range [primes[l], primes[i-1]] that are among the first n odd primes.
+    // Since primes contains all primes, and we only care about the first n odd primes,
+    // we take min(i, n) as the upper bound index in the primes array.
+    // The number of valid primes is then (min(i, n) - l).
+    if (l < std::min(static_cast<int>(n), i)) {
+        count += (std::min(static_cast<int>(n), i) - l);
+    }
+
     DLOG(INFO) << "Processing prime " << p << " with l = " << l
-               << " i - l = " << (i - l);
+               << " added = " << (std::min(static_cast<int>(n), i) - l);
   }
   return count;
 }
@@ -196,6 +219,6 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   auto res = RUN_ALL_TESTS();
   std::cout << solve(100'000'000) << std::endl;
-  std::cout << solve(1'000'000'000) << std::endl;
+  // std::cout << solve(1'000'000'000) << std::endl;
   return res;
 }

@@ -29,3 +29,7 @@ prime_number_gen_test.bin: prime_number_gen_test.cc prime_number_gen.cc
 clean:
 	rm -f *.bin
 
+test: 2025-12.bin
+	./2025-12.bin
+	python3 2025-11.py
+
