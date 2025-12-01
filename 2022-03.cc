@@ -52,66 +52,7 @@ struct ColorCode<head> {
 
 #define CC(colors...) (ColorCode<colors>::v)
 
-class PrimeNumberGen {
-private:
-  bool *notPrime_ = nullptr;
-  int low_, high_;
-
-public:
-  PrimeNumberGen(int low, int high) : low_(low), high_(high) {
-    CHECK_GT(high, low);
-    CHECK_GT(low, 0);
-    LOG(INFO) << "Initing the prime number table of size " << high;
-    notPrime_ = new bool[high + 1];
-    std::fill(notPrime_, notPrime_ + high + 1, false);
-    for (int p = 2; p * p < high; ++p) {
-      if (notPrime_[p]) {
-        continue;
-      }
-      for (int n = p * p; n < high; n += p) {
-        notPrime_[n] = true;
-      }
-    }
-    LOG(INFO) << "Initialized the prime number table of size " << high;
-  }
-
-  ~PrimeNumberGen() { delete[] notPrime_; }
-
-  struct Itr {
-    bool* ptr = nullptr;
-    const bool* base = nullptr;
-    int operator*() const {
-      return ptr - base;
-    }
-    const Itr& operator++() {
-      while (*++ptr);
-      return *this;
-    }
-
-    bool operator==(const Itr rhs) const {
-      return ptr == rhs.ptr && base == rhs.base;
-    }
-  };
-
-  Itr begin() const {
-    Itr b{
-        .ptr = notPrime_ + low_,
-        .base = notPrime_,
-    };
-    while (*b.ptr) {
-      // Not a prime
-      ++b;
-    }
-    return b;
-  }
-
-  Itr end() const {
-    return Itr{
-      .ptr = notPrime_ + high_,
-      .base = notPrime_,
-    };
-  }
-};
+#include "prime_number_gen.h"
 
 constexpr int GRAY = 0;
 constexpr int YELLOW = 1;

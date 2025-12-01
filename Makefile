@@ -1,11 +1,19 @@
-GCC_FLAGS=-g -std=gnu++20 -Wall -Wno-deprecated -Wdeprecated-declarations -Wno-error=deprecated-declarations -Wno-sign-compare -Wno-unused -Wunused-label -Wunused-result -Wnon-virtual-dtor -fopenmp
-CPP_LIBS=-lfolly -lglog -levent -lgflags -lpthread -lgtest -lfmt
+GCC_FLAGS=-g -std=gnu++20 -Wall -Wno-deprecated -Wdeprecated-declarations -Wno-error=deprecated-declarations -Wno-sign-compare -Wno-unused -Wunused-label -Wunused-result -Wnon-virtual-dtor -fopenmp -DNDEBUG
+CPP_LIBS=-lglog -levent -lgflags -lpthread -lgtest -lfmt
 
-SRCS_CC := $(wildcard *.cc)
+SRCS_CC := $(filter-out prime_number_gen.cc prime_number_gen_test.cc, $(wildcard *.cc))
 SRCS_CPP := $(wildcard *.cpp)
-BINS := $(SRCS_CC:.cc=.bin) $(SRCS_CPP:.cpp=.bin)
+BINS := $(SRCS_CC:.cc=.bin) $(SRCS_CPP:.cpp=.bin) prime_number_gen_test.bin
 
 all: $(BINS)
+
+# Specific rule for 2022-03.bin which depends on prime_number_gen.cc
+2022-03.bin: 2022-03.cc prime_number_gen.cc
+	g++ $^ -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
+
+# Specific rule for prime_number_gen_test.bin
+prime_number_gen_test.bin: prime_number_gen_test.cc prime_number_gen.cc
+	g++ $^ -O3 $(GCC_FLAGS) -lglog -lgflags -lpthread -lgtest -lfmt -lbenchmark -o $@
 
 %.bin: %.cc
 	g++ $< -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
