@@ -1,13 +1,21 @@
 # Source code for the puzzle
 # https://research.ibm.com/haifa/ponderthis/challenges/November2025.html
 
-from typing import Tuple, Self
+import unittest
+from typing import Tuple, Self, List, Dict
 
 class Matrix:
     """
     A matrix of integers of arbitrary length.
     """
-    def __init__(self, ma: list[list[int]]|int|Self):
+    def __init__(self, ma: List[List[int]]|int|Self):
+        """
+        Initialize a Matrix.
+        
+        Args:
+            ma: Can be a list of lists (the matrix data), an integer (dimension for identity/zero),
+                or another Matrix instance (copy constructor).
+        """
         if isinstance(ma, int):
             self.ma = [[0] * ma for _ in range(ma)]
             for i in range(ma):
@@ -46,18 +54,24 @@ class Matrix:
     def __repr__(self) -> str:
         return str(self)
 
-res = Matrix([[1, 3], [0, 2]]) * Matrix([[2], [1]])
-assert res == Matrix([[5], [2]]), res
-res = Matrix([[1, 2], [3, 4]]) * Matrix([[5, 6], [7, 8]])
-assert res == Matrix([[19, 22], [43, 50]]), res
 
-A = Matrix([[0,0,1,1],[1,0,0,0],[1,1,0,0],[0,0,1,0]])
-res = Matrix.identity(4)
-for _ in range(480):
-    res = res * A
-assert all([sum(row) > 10**100 + 1000 for row in res.ma])
+class TestMatrix(unittest.TestCase):
+    def test_multiplication(self):
+        res = Matrix([[1, 3], [0, 2]]) * Matrix([[2], [1]])
+        self.assertEqual(res, Matrix([[5], [2]]))
+        
+        res = Matrix([[1, 2], [3, 4]]) * Matrix([[5, 6], [7, 8]])
+        self.assertEqual(res, Matrix([[19, 22], [43, 50]]))
 
-def find_first_char(trans_map: dict[str, str], s0: str, n: int) -> str:
+    def test_large_power(self):
+        A = Matrix([[0,0,1,1],[1,0,0,0],[1,1,0,0],[0,0,1,0]])
+        res = Matrix.identity(4)
+        for _ in range(480):
+            res = res * A
+        self.assertTrue(all([sum(row) > 10**100 + 1000 for row in res.ma]))
+
+
+def find_first_char(trans_map: Dict[str, str], s0: str, n: int) -> str:
     steps = 0
     ch = s0[0]
     seen = {ch: 0}
@@ -72,7 +86,19 @@ def find_first_char(trans_map: dict[str, str], s0: str, n: int) -> str:
             seen[ch] = steps
     return ch
 
-def solve(trans: Tuple[Tuple[str, str]], s0: str, n: int, p: int) -> str:
+def solve(trans: Tuple[Tuple[str, str], ...], s0: str, n: int, p: int) -> str:
+    """
+    Find the character at position p after n steps of transformation.
+    
+    Args:
+        trans: A tuple of (input_char, output_string) tuples defining the transformation rules.
+        s0: The initial string.
+        n: The number of steps.
+        p: The 0-indexed position to find the character at.
+        
+    Returns:
+        The character at position p.
+    """
     id_map = [0] * 256
     trans_map = {}
     for i, tran in enumerate(trans):
@@ -113,7 +139,18 @@ def solve(trans: Tuple[Tuple[str, str]], s0: str, n: int, p: int) -> str:
     return s0[p]
 
 
-def bruteforce(trans: Tuple[Tuple[str, str]], s0: str, n: int) -> str:
+def bruteforce(trans: Tuple[Tuple[str, str], ...], s0: str, n: int) -> str:
+    """
+    Brute-force simulation of the transformation.
+    
+    Args:
+        trans: Transformation rules.
+        s0: Initial string.
+        n: Number of steps.
+        
+    Returns:
+        The resulting string.
+    """
     trans_map = {}
     for a, bs in trans:
         trans_map[a] = bs
@@ -129,31 +166,6 @@ CAT_TRANS = (
         ("G", "T"),
 )
 
-assert solve( CAT_TRANS, "CAT", 3, 12) == "G"
-assert solve( CAT_TRANS, "CAT", 3, 5) == "C"
-assert solve( CAT_TRANS, "CAT", 3, 6) == "A"
-assert solve( CAT_TRANS, "CAT", 3, 7) == "T"
-assert solve( CAT_TRANS, "CAT", 10**100, 0) == "C"
-
-assert bruteforce( CAT_TRANS, "CAT", 3) == "TGCCACATCATTG"
-bt = bruteforce( CAT_TRANS, "CAT", 3)
-for p in range(len(bt)):
-    assert solve(CAT_TRANS, "CAT", 3, p) == bt[p]
-
-bt = bruteforce(CAT_TRANS, "CAT", 31)
-assert len(bt) == 9227465
-
-assert solve(CAT_TRANS, "CAT", 31, 0) == bt[0]
-assert solve(CAT_TRANS, "CAT", 31, 10) == bt[10]
-assert solve(CAT_TRANS, "CAT", 31, 100) == bt[100]
-assert solve(CAT_TRANS, "CAT", 31, 1000) == bt[1000]
-assert solve(CAT_TRANS, "CAT", 31, 10000) == bt[10000]
-assert solve(CAT_TRANS, "CAT", 31, 10001) == bt[10001]
-
-
-for p in range(0, 9227465, 2001):
-    assert solve(CAT_TRANS, "CAT", 31, p) == bt[p]
-
 RABBIT_TRANS = (
     ("G", "T"),
     ("T", "CA"),
@@ -164,18 +176,54 @@ RABBIT_TRANS = (
     ("I", "TG"),
     ("S", "C"),
 )
-bt = bruteforce(RABBIT_TRANS, "RABBITS", 20)
-assert len(bt) == 103682
-for p in range(0, len(bt), 2001):
-    assert solve(RABBIT_TRANS, "RABBITS", 20, p) == bt[p]
 
-n100 = 10**100
-cat= "".join(
-    [solve(CAT_TRANS, "CAT", n100, n100 + p) for p in range(1000)]
-)
-rabbit = "".join(
-    [solve(RABBIT_TRANS, "RABBITS", n100, n100 + p) for p in range(1000)]
-)
+class TestPuzzle(unittest.TestCase):
+    def test_cat_small(self):
+        self.assertEqual(solve(CAT_TRANS, "CAT", 3, 12), "G")
+        self.assertEqual(solve(CAT_TRANS, "CAT", 3, 5), "C")
+        self.assertEqual(solve(CAT_TRANS, "CAT", 3, 6), "A")
+        self.assertEqual(solve(CAT_TRANS, "CAT", 3, 7), "T")
+        self.assertEqual(solve(CAT_TRANS, "CAT", 10**100, 0), "C")
 
-print(cat)
-print(rabbit)
+    def test_cat_bruteforce_consistency(self):
+        self.assertEqual(bruteforce(CAT_TRANS, "CAT", 3), "TGCCACATCATTG")
+        bt = bruteforce(CAT_TRANS, "CAT", 3)
+        for p in range(len(bt)):
+            self.assertEqual(solve(CAT_TRANS, "CAT", 3, p), bt[p])
+
+    def test_cat_large_consistency(self):
+        bt = bruteforce(CAT_TRANS, "CAT", 31)
+        self.assertEqual(len(bt), 9227465)
+        
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 0), bt[0])
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 10), bt[10])
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 100), bt[100])
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 1000), bt[1000])
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 10000), bt[10000])
+        self.assertEqual(solve(CAT_TRANS, "CAT", 31, 10001), bt[10001])
+
+        for p in range(0, 9227465, 2001):
+            self.assertEqual(solve(CAT_TRANS, "CAT", 31, p), bt[p])
+
+    def test_rabbit_consistency(self):
+        bt = bruteforce(RABBIT_TRANS, "RABBITS", 20)
+        self.assertEqual(len(bt), 103682)
+        for p in range(0, len(bt), 2001):
+            self.assertEqual(solve(RABBIT_TRANS, "RABBITS", 20, p), bt[p])
+
+if __name__ == "__main__":
+    # Run tests if no arguments, otherwise run the main solver
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "solve":
+        n100 = 10**100
+        cat= "".join(
+            [solve(CAT_TRANS, "CAT", n100, n100 + p) for p in range(1000)]
+        )
+        rabbit = "".join(
+            [solve(RABBIT_TRANS, "RABBITS", n100, n100 + p) for p in range(1000)]
+        )
+        
+        print(cat)
+        print(rabbit)
+    else:
+        unittest.main()

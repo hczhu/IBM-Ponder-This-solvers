@@ -314,6 +314,6 @@ int main(int argc, char* argv[]) {
   };
 
   solver(pg5, 5);
-  solver(pg7, 7);
+  // solver(pg7, 7);
   return 0;
 }

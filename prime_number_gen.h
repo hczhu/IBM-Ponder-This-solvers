@@ -1,12 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 class PrimeNumberGen {
 private:
- uint64_t* notPrime_ = nullptr; // bit vector
- uint64_t low_, high_;
- uint64_t arraySize_; // number of uint64_t elements
+  std::vector<uint64_t> notPrime_; // bit vector
+  uint64_t low_, high_;
+
 
  // Helper methods for bit manipulation
  static constexpr uint64_t wordIndex(uint64_t n) { return n >> 6; }
