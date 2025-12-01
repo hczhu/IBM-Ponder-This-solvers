@@ -1,6 +1,6 @@
 #include "prime_number_gen.h"
-#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <glog/logging.h>
 
 PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
@@ -9,13 +9,11 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
   CHECK_GT(low, 0u);
   DLOG(INFO) << "Initing the prime number table of size " << high;
 
-  arraySize_ = high / 64 + 2;
-  notPrime_ = new uint64_t[arraySize_];
-  memset(notPrime_, 0, arraySize_ * sizeof(uint64_t));
+  notPrime_ = new bool[high + 2](); // +2 for sentinel, () zero-initializes
 
   // 0 and 1 are not prime
-  setNotPrime(0);
-  setNotPrime(1);
+  notPrime_[0] = true;
+  notPrime_[1] = true;
 
   const uint64_t sqrtHigh = [high]() {
     uint64_t res = static_cast<uint64_t>(std::sqrt(high)) + 2;
@@ -26,20 +24,20 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high)
   }();
   const uint64_t sqrtSqrtHigh = static_cast<uint64_t>(std::sqrt(sqrtHigh)) + 1;
   for (uint64_t p = 2; p <= sqrtSqrtHigh; ++p) {
-    if (isNotPrime(p)) {
+    if (notPrime_[p]) {
       continue;
     }
     for (uint64_t n = p * p; n <= sqrtHigh; n += p) {
-      setNotPrime(n);
+      notPrime_[n] = true;
     }
   }
-#pragma omp parallel for schedule(static, 1)
+  // #pragma omp parallel for schedule(static, 1)
   for (uint64_t p = 2; p <= sqrtHigh; ++p) {
-    if (isNotPrime(p)) {
+    if (notPrime_[p]) {
       continue;
     }
     for (uint64_t n = p * p; n <= high_; n += p) {
-      setNotPrime(n);
+      notPrime_[n] = true;
     }
   }
   DLOG(INFO) << "Initialized the prime number table of size " << high;
