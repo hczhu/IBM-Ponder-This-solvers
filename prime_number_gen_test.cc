@@ -50,7 +50,7 @@ TEST(PrimeNumberGenTest, LargeRangeCount) {
 // Benchmarks
 static void BM_PrimeGenConstruction(benchmark::State& state) {
   for (auto _ : state) {
-    PrimeNumberGen pg(1, 1000000000ULL);
+    PrimeNumberGen pg(1, 1'000'000'000ULL);
     benchmark::DoNotOptimize(pg);
   }
 }
@@ -58,7 +58,7 @@ BENCHMARK(BM_PrimeGenConstruction)->Unit(benchmark::kMillisecond);
 
 static void BM_PrimeGenConstructionLarge(benchmark::State& state) {
   for (auto _ : state) {
-    PrimeNumberGen pg(1, 10000000000ULL);
+    PrimeNumberGen pg(1, 10'000'000'000ULL);
     benchmark::DoNotOptimize(pg);
   }
 }

@@ -22,6 +22,7 @@ public:
   bool isNotPrime(uint64_t n) const {
     return (notPrime_[wordIndex(n)] >> bitIndex(n)) & 1;
   }
+  bool isPrime(uint64_t n) const { return !isNotPrime(n); }
 
   struct Itr {
     const PrimeNumberGen* gen = nullptr;

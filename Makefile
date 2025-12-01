@@ -11,6 +11,10 @@ all: $(BINS)
 2022-03.bin: 2022-03.cc prime_number_gen.cc
 	g++ $^ -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
 
+# Specific rule for 2025-12.bin which depends on prime_number_gen.cc
+2025-12.bin: 2025-12.cc prime_number_gen.cc
+	g++ $^ -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
+
 # Specific rule for prime_number_gen_test.bin
 prime_number_gen_test.bin: prime_number_gen_test.cc prime_number_gen.cc
 	g++ $^ -O3 $(GCC_FLAGS) -lglog -lgflags -lpthread -lgtest -lfmt -lbenchmark -o $@
