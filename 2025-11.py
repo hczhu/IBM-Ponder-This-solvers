@@ -54,8 +54,6 @@ class Matrix:
     def __repr__(self) -> str:
         return str(self)
 
-    def __repr__(self) -> str:
-        return str(self)
 
 class TestMatrix(unittest.TestCase):
     def test_multiplication(self):
