@@ -6,16 +6,22 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high) : low_(low), high_(h
   CHECK_GT(high, low);
   CHECK_GT(low, 0u);
   DLOG(INFO) << "Initing the prime number table of size " << high;
-  notPrime_ = new bool[high + 1];
-  std::fill(notPrime_, notPrime_ + high + 1, false);
-  notPrime_[0] = true;
-  notPrime_[1] = true;
+
+  // Allocate bit vector: (high + 1) bits, stored in uint64_t words
+  arraySize_ = (high + 64) / 64; // ceiling division
+  notPrime_ = new uint64_t[arraySize_];
+  std::fill(notPrime_, notPrime_ + arraySize_, 0ULL);
+
+  // 0 and 1 are not prime
+  setNotPrime(0);
+  setNotPrime(1);
+
   for (uint64_t p = 2; p * p <= high; ++p) {
-    if (notPrime_[p]) {
+    if (isNotPrime(p)) {
       continue;
     }
     for (uint64_t n = p * p; n <= high; n += p) {
-      notPrime_[n] = true;
+      setNotPrime(n);
     }
   }
   DLOG(INFO) << "Initialized the prime number table of size " << high;
@@ -23,38 +29,36 @@ PrimeNumberGen::PrimeNumberGen(uint64_t low, uint64_t high) : low_(low), high_(h
 
 PrimeNumberGen::~PrimeNumberGen() { delete[] notPrime_; }
 
-uint64_t PrimeNumberGen::Itr::operator*() const {
-  return ptr - base;
-}
+uint64_t PrimeNumberGen::Itr::operator*() const { return current; }
 
 const PrimeNumberGen::Itr& PrimeNumberGen::Itr::operator++() {
   do {
-    ++ptr;
-  } while (ptr < end_ptr && *ptr);
+    ++current;
+  } while (current < end_val && gen->isNotPrime(current));
   return *this;
 }
 
 bool PrimeNumberGen::Itr::operator==(const Itr rhs) const {
-  return ptr == rhs.ptr && base == rhs.base;
+  return current == rhs.current && gen == rhs.gen;
 }
 
 PrimeNumberGen::Itr PrimeNumberGen::begin() const {
   Itr b{
-      .ptr = notPrime_ + low_,
-      .base = notPrime_,
-      .end_ptr = notPrime_ + high_,
+      .gen = this,
+      .current = low_,
+      .end_val = high_,
   };
-  while (b.ptr < b.end_ptr && *b.ptr) {
+  while (b.current < b.end_val && isNotPrime(b.current)) {
     // Not a prime
-    b.ptr++;
+    b.current++;
   }
   return b;
 }
 
 PrimeNumberGen::Itr PrimeNumberGen::end() const {
   return Itr{
-    .ptr = notPrime_ + high_,
-    .base = notPrime_,
-    .end_ptr = notPrime_ + high_,
+      .gen = this,
+      .current = high_,
+      .end_val = high_,
   };
 }
