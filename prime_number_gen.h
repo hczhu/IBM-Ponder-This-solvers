@@ -4,14 +4,24 @@
 
 class PrimeNumberGen {
 private:
- bool* notPrime_ = nullptr;
+ uint64_t* notPrime_ = nullptr; // bit vector
  uint64_t low_, high_;
+ uint64_t arraySize_; // number of uint64_t elements
+
+ // Helper methods for bit manipulation
+ static constexpr uint64_t wordIndex(uint64_t n) { return n >> 6; }
+ static constexpr uint64_t bitIndex(uint64_t n) { return n & 63; }
+ void setNotPrime(uint64_t n) {
+   notPrime_[wordIndex(n)] |= (1ULL << bitIndex(n));
+ }
 
 public:
   PrimeNumberGen(uint64_t low, uint64_t high);
   ~PrimeNumberGen();
 
-  bool isNotPrime(uint64_t n) const { return notPrime_[n]; }
+  bool isNotPrime(uint64_t n) const {
+    return (notPrime_[wordIndex(n)] >> bitIndex(n)) & 1;
+  }
 
   struct Itr {
     const PrimeNumberGen* gen = nullptr;
