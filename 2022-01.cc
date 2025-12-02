@@ -235,6 +235,9 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   auto ret = RUN_ALL_TESTS();
   LOG(INFO) << "RUN_ALL_TESTS returns: " << ret;
+  if (argc <= 1 || std::string(argv[1]) != "solve") {
+    return ret;
+  }
   auto solveOne = [&](int n, int d) {
     solve(n, d);
     std::cout << "Solved for n = " << n << " d = " << d << std::endl;
