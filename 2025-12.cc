@@ -218,7 +218,10 @@ int main(int argc, char** argv) {
 
   testing::InitGoogleTest(&argc, argv);
   auto res = RUN_ALL_TESTS();
+  if (argc <= 1 || std::string(argv[1]) != "solve") {
+    return res;
+  }
   std::cout << solve(100'000'000) << std::endl;
-  // std::cout << solve(1'000'000'000) << std::endl;
+  std::cout << solve(1'000'000'000) << std::endl;
   return res;
 }

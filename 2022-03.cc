@@ -269,6 +269,9 @@ int main(int argc, char* argv[]) {
 
   auto ret = RUN_ALL_TESTS();
   CHECK_EQ(ret, 0) << "RUN_ALL_TESTS returns: " << ret;
+  if (argc <= 1 || std::string(argv[1]) != "solve") {
+    return ret;
+  }
 
   PrimeNumberGen pg5(10'000, 100'000);
   PrimeNumberGen pg7(1'000'000, 10'000'000);
@@ -314,6 +317,6 @@ int main(int argc, char* argv[]) {
   };
 
   solver(pg5, 5);
-  // solver(pg7, 7);
+  solver(pg7, 7);
   return 0;
 }
