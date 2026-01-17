@@ -35,6 +35,7 @@ public:
     uint64_t operator*() const;
     const Itr& operator++();
     bool operator==(const Itr rhs) const;
+    bool operator!=(const Itr rhs) const { return !operator==(rhs); }
   };
 
   Itr begin() const;

@@ -1,5 +1,8 @@
-GCC_FLAGS=-g -std=gnu++20 -Wall -Wno-deprecated -Wdeprecated-declarations -Wno-error=deprecated-declarations -Wno-sign-compare -Wno-unused -Wunused-label -Wunused-result -Wnon-virtual-dtor -fopenmp -DNDEBUG
-CPP_LIBS=-lglog -levent -lgflags -lpthread -lgtest -lfmt
+CXXFLAGS=-g -std=gnu++20 -Wall -Wno-deprecated -Wdeprecated-declarations -Wno-error=deprecated-declarations -Wno-sign-compare -Wno-unused -Wunused-label -Wunused-result -Wnon-virtual-dtor -fopenmp -DNDEBUG
+LDLIBS=-lglog -levent -lgflags -lpthread -lgtest -lfmt
+
+GCC_FLAGS=$(CXXFLAGS)
+CPP_LIBS=$(LDLIBS)
 
 SRCS_CC := $(filter-out prime_number_gen.cc prime_number_gen_test.cc, $(wildcard *.cc))
 SRCS_CPP := $(wildcard *.cpp)
