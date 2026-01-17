@@ -19,7 +19,6 @@ A bonus "*" will be given for finding the sum of all the natural numbers x such 
 #include <iostream>
 #include <vector>
 #include <unordered_set>
-#include <shared_mutex>
 #include <thread>
 #include <omp.h>
 
