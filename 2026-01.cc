@@ -29,7 +29,8 @@ A bonus "*" will be given for finding the sum of all the natural numbers x such 
 using Nat = uint64_t;
 
 // Return true if f returns true for any value
-bool genAn(Nat n, std::function<bool(Nat)> f) {
+template <typename F>
+bool genAn(Nat n, F f) {
   int digits[20];
   const int nd = [&] {
     int nd = 0;
