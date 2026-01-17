@@ -194,7 +194,6 @@ TEST(solveTest, Basic) {
   EXPECT_EQ(bruteForce(10'000), solve(10'000, 31));
   EXPECT_EQ(bruteForce(100'000), solve(100'000, 31));
 }
-    
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
