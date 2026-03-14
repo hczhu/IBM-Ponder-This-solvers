@@ -106,7 +106,7 @@ struct HopcroftKarp {
           }
         }
       }
-      if (found) return true;               // exit first loop
+      if (found) { return true; }           // exit first loop
       std::swap(cur, nxt);
     }
     return false;
@@ -127,10 +127,13 @@ struct HopcroftKarp {
 
   int maxMatching() {
     int res = 0;
-    while (bfs())
-      for (int l = 0; l < nL; ++l)
-        if (match_l[l] == -1 && dfs(l))
+    while (bfs()) {
+      for (int l = 0; l < nL; ++l) {
+        if (match_l[l] == -1 && dfs(l)) {
           ++res;
+        }
+      }
+    }
     return res;
   }
 };
@@ -150,27 +153,29 @@ HopcroftKarp buildGridHK(int N, int M, int64_t p, int64_t q, int s) {
   int total = N * M;
   std::vector<int> lIdx(total, -1), rIdx(total, -1);
   int nL = 0, nR = 0;
-  for (int i = 1; i <= N; ++i)
+  for (int i = 1; i <= N; ++i) {
     for (int j = 1; j <= M; ++j) {
-      if ((powP[i] + powQ[j]) % s == 0) continue;
+      if ((powP[i] + powQ[j]) % s == 0) { continue; }
       int f = (i - 1) * M + (j - 1);
-      if ((i + j) % 2 == 0) lIdx[f] = nL++;
-      else                   rIdx[f] = nR++;
+      if ((i + j) % 2 == 0) { lIdx[f] = nL++; }
+      else                   { rIdx[f] = nR++; }
     }
+  }
   HopcroftKarp hk(nL, nR);
   const int di[] = {0, 0, 1, -1}, dj[] = {1, -1, 0, 0};
-  for (int i = 1; i <= N; ++i)
+  for (int i = 1; i <= N; ++i) {
     for (int j = 1; j <= M; ++j) {
       int f = (i - 1) * M + (j - 1);
-      if (lIdx[f] == -1) continue;
+      if (lIdx[f] == -1) { continue; }
       for (int d = 0; d < 4; ++d) {
         int ni = i + di[d], nj = j + dj[d];
-        if (ni < 1 || ni > N || nj < 1 || nj > M) continue;
+        if (ni < 1 || ni > N || nj < 1 || nj > M) { continue; }
         int nf = (ni - 1) * M + (nj - 1);
-        if (rIdx[nf] == -1) continue;
+        if (rIdx[nf] == -1) { continue; }
         hk.addEdge(lIdx[f], rIdx[nf]);
       }
     }
+  }
   return hk;
 }
 
@@ -201,25 +206,27 @@ TEST(HopcroftKarp, PathGraph) {
 TEST(HopcroftKarp, StarFromLeft) {
   // L={0}, R={0,1,2,3}: L[0] connects all R. Max matching = 1.
   HopcroftKarp hk(1, 4);
-  for (int r = 0; r < 4; ++r) hk.addEdge(0, r);
+  for (int r = 0; r < 4; ++r) { hk.addEdge(0, r); }
   EXPECT_EQ(hk.maxMatching(), 1);
   EXPECT_NE(hk.match_l[0], -1);
   int mr = hk.match_l[0];
   EXPECT_EQ(hk.match_r[mr], 0);
-  for (int r = 0; r < 4; ++r)
+  for (int r = 0; r < 4; ++r) {
     if (r != mr) { EXPECT_EQ(hk.match_r[r], -1); }
+  }
 }
 
 TEST(HopcroftKarp, StarFromRight) {
   // L={0,1,2,3}, R={0}: all L connect R[0]. Max matching = 1.
   HopcroftKarp hk(4, 1);
-  for (int l = 0; l < 4; ++l) hk.addEdge(l, 0);
+  for (int l = 0; l < 4; ++l) { hk.addEdge(l, 0); }
   EXPECT_EQ(hk.maxMatching(), 1);
   EXPECT_NE(hk.match_r[0], -1);
   int ml = hk.match_r[0];
   EXPECT_EQ(hk.match_l[ml], 0);
-  for (int l = 0; l < 4; ++l)
+  for (int l = 0; l < 4; ++l) {
     if (l != ml) { EXPECT_EQ(hk.match_l[l], -1); }
+  }
 }
 
 TEST(HopcroftKarp, PerfectMatching_K22) {
@@ -227,25 +234,27 @@ TEST(HopcroftKarp, PerfectMatching_K22) {
   hk.addEdge(0, 0); hk.addEdge(0, 1);
   hk.addEdge(1, 0); hk.addEdge(1, 1);
   EXPECT_EQ(hk.maxMatching(), 2);
-  for (int l = 0; l < 2; ++l) EXPECT_NE(hk.match_l[l], -1);
-  for (int r = 0; r < 2; ++r) EXPECT_NE(hk.match_r[r], -1);
+  for (int l = 0; l < 2; ++l) { EXPECT_NE(hk.match_l[l], -1); }
+  for (int r = 0; r < 2; ++r) { EXPECT_NE(hk.match_r[r], -1); }
 }
 
 TEST(HopcroftKarp, PerfectMatching_K33) {
   HopcroftKarp hk(3, 3);
-  for (int l = 0; l < 3; ++l)
-    for (int r = 0; r < 3; ++r)
+  for (int l = 0; l < 3; ++l) {
+    for (int r = 0; r < 3; ++r) {
       hk.addEdge(l, r);
+    }
+  }
   EXPECT_EQ(hk.maxMatching(), 3);
-  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
-  for (int r = 0; r < 3; ++r) EXPECT_NE(hk.match_r[r], -1);
+  for (int l = 0; l < 3; ++l) { EXPECT_NE(hk.match_l[l], -1); }
+  for (int r = 0; r < 3; ++r) { EXPECT_NE(hk.match_r[r], -1); }
 }
 
 TEST(HopcroftKarp, EmptyGraph) {
   HopcroftKarp hk(3, 3);
   EXPECT_EQ(hk.maxMatching(), 0);
-  for (int l = 0; l < 3; ++l) EXPECT_EQ(hk.match_l[l], -1);
-  for (int r = 0; r < 3; ++r) EXPECT_EQ(hk.match_r[r], -1);
+  for (int l = 0; l < 3; ++l) { EXPECT_EQ(hk.match_l[l], -1); }
+  for (int r = 0; r < 3; ++r) { EXPECT_EQ(hk.match_r[r], -1); }
 }
 
 TEST(HopcroftKarp, DisconnectedComponents) {
@@ -256,8 +265,8 @@ TEST(HopcroftKarp, DisconnectedComponents) {
   hk.addEdge(2, 2); hk.addEdge(2, 3);
   hk.addEdge(3, 2); hk.addEdge(3, 3);
   EXPECT_EQ(hk.maxMatching(), 4);
-  for (int l = 0; l < 4; ++l) EXPECT_NE(hk.match_l[l], -1);
-  for (int r = 0; r < 4; ++r) EXPECT_NE(hk.match_r[r], -1);
+  for (int l = 0; l < 4; ++l) { EXPECT_NE(hk.match_l[l], -1); }
+  for (int r = 0; r < 4; ++r) { EXPECT_NE(hk.match_r[r], -1); }
 }
 
 TEST(HopcroftKarp, AugmentingPathChain) {
@@ -268,20 +277,24 @@ TEST(HopcroftKarp, AugmentingPathChain) {
   hk.addEdge(1, 0); hk.addEdge(1, 1);
   hk.addEdge(2, 1); hk.addEdge(2, 2);
   EXPECT_EQ(hk.maxMatching(), 3);
-  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
-  for (int r = 0; r < 3; ++r) EXPECT_NE(hk.match_r[r], -1);
+  for (int l = 0; l < 3; ++l) { EXPECT_NE(hk.match_l[l], -1); }
+  for (int r = 0; r < 3; ++r) { EXPECT_NE(hk.match_r[r], -1); }
 }
 
 TEST(HopcroftKarp, AsymmetricSizes_K34) {
   // K_{3,4}: max matching = 3 (limited by left side).
   HopcroftKarp hk(3, 4);
-  for (int l = 0; l < 3; ++l)
-    for (int r = 0; r < 4; ++r)
+  for (int l = 0; l < 3; ++l) {
+    for (int r = 0; r < 4; ++r) {
       hk.addEdge(l, r);
+    }
+  }
   EXPECT_EQ(hk.maxMatching(), 3);
-  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
+  for (int l = 0; l < 3; ++l) { EXPECT_NE(hk.match_l[l], -1); }
   int matchedR = 0;
-  for (int r = 0; r < 4; ++r) if (hk.match_r[r] != -1) ++matchedR;
+  for (int r = 0; r < 4; ++r) {
+    if (hk.match_r[r] != -1) { ++matchedR; }
+  }
   EXPECT_EQ(matchedR, 3);
 }
 
@@ -294,10 +307,12 @@ TEST(HopcroftKarp, MatchConsistency) {
   hk.addEdge(3, 1); hk.addEdge(3, 3);
   hk.addEdge(4, 4);
   hk.maxMatching();
-  for (int l = 0; l < 5; ++l)
+  for (int l = 0; l < 5; ++l) {
     if (hk.match_l[l] != -1) { EXPECT_EQ(hk.match_r[hk.match_l[l]], l) << "l=" << l; }
-  for (int r = 0; r < 5; ++r)
+  }
+  for (int r = 0; r < 5; ++r) {
     if (hk.match_r[r] != -1) { EXPECT_EQ(hk.match_l[hk.match_r[r]], r) << "r=" << r; }
+  }
 }
 
 TEST(HopcroftKarp, LargerBipartite_3x3Grid) {
@@ -311,9 +326,11 @@ TEST(HopcroftKarp, LargerBipartite_3x3Grid) {
   hk.addEdge(3, 1); hk.addEdge(3, 3);
   hk.addEdge(4, 2); hk.addEdge(4, 3);
   EXPECT_EQ(hk.maxMatching(), 4);
-  for (int r = 0; r < 4; ++r) EXPECT_NE(hk.match_r[r], -1) << "r=" << r;
+  for (int r = 0; r < 4; ++r) { EXPECT_NE(hk.match_r[r], -1) << "r=" << r; }
   int freeL = 0;
-  for (int l = 0; l < 5; ++l) if (hk.match_l[l] == -1) ++freeL;
+  for (int l = 0; l < 5; ++l) {
+    if (hk.match_l[l] == -1) { ++freeL; }
+  }
   EXPECT_EQ(freeL, 1);
 }
 
@@ -327,8 +344,8 @@ TEST(HopcroftKarp, GridDerived_KnownMatchingSize) {
     EXPECT_EQ(hk.nL, 8);
     EXPECT_EQ(hk.nR, 8);
     EXPECT_EQ(hk.maxMatching(), 8);
-    for (int l = 0; l < hk.nL; ++l) EXPECT_NE(hk.match_l[l], -1);
-    for (int r = 0; r < hk.nR; ++r) EXPECT_NE(hk.match_r[r], -1);
+    for (int l = 0; l < hk.nL; ++l) { EXPECT_NE(hk.match_l[l], -1); }
+    for (int r = 0; r < hk.nR; ++r) { EXPECT_NE(hk.match_r[r], -1); }
   }
   // 1×N strip (path graph): L=⌈N/2⌉, R=⌊N/2⌋. Max matching = ⌊N/2⌋.
   for (int N : {3, 4, 5, 6, 7}) {
@@ -346,10 +363,12 @@ TEST(HopcroftKarp, GridDerived_p419_q211) {
     // Matching must not exceed min(nL, nR)
     EXPECT_LE(m, std::min(hk.nL, hk.nR));
     // Consistency check
-    for (int l = 0; l < hk.nL; ++l)
+    for (int l = 0; l < hk.nL; ++l) {
       if (hk.match_l[l] != -1) { EXPECT_EQ(hk.match_r[hk.match_l[l]], l); }
-    for (int r = 0; r < hk.nR; ++r)
+    }
+    for (int r = 0; r < hk.nR; ++r) {
       if (hk.match_r[r] != -1) { EXPECT_EQ(hk.match_l[hk.match_r[r]], r); }
+    }
   }
 }
 
@@ -424,12 +443,13 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
   int nL = 0, nR = 0;
   for (int i = 1; i <= N; ++i) {
     for (int j = 1; j <= M; ++j) {
-      if ((powP[i] + powQ[j]) % s == 0) continue; // removed
+      if ((powP[i] + powQ[j]) % s == 0) { continue; } // removed
       int flat = (i - 1) * M + (j - 1);
-      if ((i + j) % 2 == 0)
+      if ((i + j) % 2 == 0) {
         lIdx[flat] = nL++;
-      else
+      } else {
         rIdx[flat] = nR++;
+      }
     }
   }
 
@@ -446,12 +466,12 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
   for (int i = 1; i <= N; ++i) {
     for (int j = 1; j <= M; ++j) {
       int f = flat(i, j);
-      if (lIdx[f] == -1) continue; // removed or R-node
+      if (lIdx[f] == -1) { continue; } // removed or R-node
       for (int d = 0; d < 4; ++d) {
         int ni = i + di[d], nj = j + dj[d];
-        if (ni < 1 || ni > N || nj < 1 || nj > M) continue;
+        if (ni < 1 || ni > N || nj < 1 || nj > M) { continue; }
         int nf = flat(ni, nj);
-        if (rIdx[nf] == -1) continue; // removed or L-node
+        if (rIdx[nf] == -1) { continue; } // removed or L-node
         hk.addEdge(lIdx[f], rIdx[nf]);
       }
     }
@@ -584,10 +604,10 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
     for (int j = 1; j <= M; ++j) {
       int f = flat(i, j);
       if ((i + j) % 2 == 0) {
-        if (lIdx[f] == -1) continue;
+        if (lIdx[f] == -1) { continue; }
         (notEveryL[lIdx[f]] ? cnt.A : cnt.B)++;
       } else {
-        if (rIdx[f] == -1) continue;
+        if (rIdx[f] == -1) { continue; }
         (notEveryR[rIdx[f]] ? cnt.A : cnt.B)++;
       }
     }
@@ -626,9 +646,11 @@ bool firstPlayerWinsVG(int N, int M,
   int sz = N * M;
   auto idx = [&](int i, int j) { return i * M + j; };
   uint32_t initMask = 0;
-  for (int i = 0; i < N; ++i)
-    for (int j = 0; j < M; ++j)
-      if (removed[i][j]) initMask |= (1u << idx(i, j));
+  for (int i = 0; i < N; ++i) {
+    for (int j = 0; j < M; ++j) {
+      if (removed[i][j]) { initMask |= (1u << idx(i, j)); }
+    }
+  }
 
   // memo[pos][mask] = true if current player wins
   // pos: flat index of pawn; mask: removed squares (the pawn's square is
@@ -640,7 +662,7 @@ bool firstPlayerWinsVG(int N, int M,
   std::function<bool(int, uint32_t)> wins = [&](int pos, uint32_t mask) -> bool {
     uint64_t key = ((uint64_t)pos << 32) | mask;
     auto it = memo.find(key);
-    if (it != memo.end()) return it->second;
+    if (it != memo.end()) { return it->second; }
 
     int ci = pos / M, cj = pos % M;
     const int di[] = {0, 0, 1, -1};
@@ -648,9 +670,9 @@ bool firstPlayerWinsVG(int N, int M,
     bool canMove = false;
     for (int d = 0; d < 4; ++d) {
       int ni = ci + di[d], nj = cj + dj[d];
-      if (ni < 0 || ni >= N || nj < 0 || nj >= M) continue;
+      if (ni < 0 || ni >= N || nj < 0 || nj >= M) { continue; }
       int npos = idx(ni, nj);
-      if (mask & (1u << npos)) continue; // removed
+      if (mask & (1u << npos)) { continue; } // removed
       canMove = true;
       uint32_t newMask = mask | (1u << pos); // remove current square
       if (!wins(npos, newMask)) { // opponent loses -> we win
@@ -674,14 +696,16 @@ bool firstPlayerWinsVG(int N, int M,
 Counts bruteForceBoard(int N, int M,
                        const std::vector<std::vector<bool>>& removed) {
   Counts cnt;
-  for (int i = 0; i < N; ++i)
+  for (int i = 0; i < N; ++i) {
     for (int j = 0; j < M; ++j) {
-      if (removed[i][j]) continue;
-      if (firstPlayerWinsVG(N, M, removed, i, j))
+      if (removed[i][j]) { continue; }
+      if (firstPlayerWinsVG(N, M, removed, i, j)) {
         cnt.B++;
-      else
+      } else {
         cnt.A++;
+      }
     }
+  }
   return cnt;
 }
 
@@ -703,9 +727,11 @@ std::vector<std::vector<bool>> buildRemoved(int N, int M, int64_t p, int64_t q,
     for (int j = 1; j <= M; ++j) { acc = acc * (q % s) % s; pq[j] = (int)acc; }
   }
   std::vector<std::vector<bool>> removed(N, std::vector<bool>(M, false));
-  for (int i = 1; i <= N; ++i)
-    for (int j = 1; j <= M; ++j)
+  for (int i = 1; i <= N; ++i) {
+    for (int j = 1; j <= M; ++j) {
       removed[i - 1][j - 1] = ((pp[i] + pq[j]) % s == 0);
+    }
+  }
   return removed;
 }
 
@@ -820,18 +846,18 @@ TEST(ClassifyBoard, NothingRemoved_SmallBoards) {
   // Actually just use the brute force on a "no removal" board for verification:
   for (int N = 1; N <= 4; ++N) {
     for (int M = 1; M <= 4; ++M) {
-      if (N * M > 16) continue;
+      if (N * M > 16) { continue; }
       std::vector<std::vector<bool>> removed(N, std::vector<bool>(M, false));
       auto expected = bruteForceBoard(N, M, removed);
       // Use p=2,q=3,s=97: verify no removals happen, then compare
       bool anyRemoved = false;
       for (int i = 1; i <= N && !anyRemoved; ++i) {
         int64_t pi = 1;
-        for (int k = 0; k < i; ++k) pi = pi * 2 % 97;
+        for (int k = 0; k < i; ++k) { pi = pi * 2 % 97; }
         for (int j = 1; j <= M && !anyRemoved; ++j) {
           int64_t qj = 1;
-          for (int k = 0; k < j; ++k) qj = qj * 3 % 97;
-          if ((pi + qj) % 97 == 0) anyRemoved = true;
+          for (int k = 0; k < j; ++k) { qj = qj * 3 % 97; }
+          if ((pi + qj) % 97 == 0) { anyRemoved = true; }
         }
       }
       if (!anyRemoved) {
@@ -969,9 +995,11 @@ TEST(Sanity, ABSumEqualsNonRemoved) {
     acc = 1;
     for (int j = 1; j <= c.M; ++j) { acc = acc * (c.q % c.s) % c.s; pq[j] = (int)acc; }
     int nonRemoved = 0;
-    for (int i = 1; i <= c.N; ++i)
-      for (int j = 1; j <= c.M; ++j)
-        if ((pp[i] + pq[j]) % c.s != 0) ++nonRemoved;
+    for (int i = 1; i <= c.N; ++i) {
+      for (int j = 1; j <= c.M; ++j) {
+        if ((pp[i] + pq[j]) % c.s != 0) { ++nonRemoved; }
+      }
+    }
     auto cnt = classifyBoard(c.N, c.M, c.p, c.q, c.s);
     EXPECT_EQ(cnt.A + cnt.B, nonRemoved)
         << "N=" << c.N << " M=" << c.M << " s=" << c.s;
