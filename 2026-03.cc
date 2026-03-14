@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <iostream>
 #include <queue>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -67,26 +68,35 @@ std::vector<int> primesBelow(int limit) {
 //
 // L-nodes: 0 .. nL-1
 // R-nodes: 0 .. nR-1
-// adj[l] = list of r-indices adjacent to l
+//
+// Edges are stored in flat arrays: each node has a fixed-size slot of max_k
+// entries.  adj[l*max_k .. l*max_k+adj_count[l]) are the R-neighbors of l;
+// radj[r*max_k .. r*max_k+radj_count[r]) are the L-neighbors of r.
+// This avoids the pointer-chasing overhead of nested std::vector.
 //
 // Returns match_l[l] = r matched to l (-1 if unmatched)
 //         match_r[r] = l matched to r (-1 if unmatched)
 // ---------------------------------------------------------------------------
 struct HopcroftKarp {
-  int nL, nR;
-  std::vector<std::vector<int>> adj;   // adj[l]  = list of r neighbors
-  std::vector<std::vector<int>> radj;  // radj[r] = list of l neighbors (reverse)
+  int nL, nR, max_k;
+  std::vector<int> adj,        adj_count;   // adj[l*max_k + i], adj_count[l]
+  std::vector<int> radj,       radj_count;  // radj[r*max_k + i], radj_count[r]
   std::vector<int> match_l, match_r, dist;
   int bfs_depth = 0;
 
-  HopcroftKarp(int nL, int nR)
-      : nL(nL), nR(nR), adj(nL), radj(nR),
+  HopcroftKarp(int nL, int nR, int max_k)
+      : nL(nL), nR(nR), max_k(max_k),
+        adj(nL * max_k),  adj_count(nL, 0),
+        radj(nR * max_k), radj_count(nR, 0),
         match_l(nL, -1), match_r(nR, -1), dist(nL) {}
 
   void addEdge(int l, int r) {
-    adj[l].push_back(r);
-    radj[r].push_back(l);
+    adj [l * max_k + adj_count [l]++] = r;
+    radj[r * max_k + radj_count[r]++] = l;
   }
+
+  std::span<int> adj_of (int l) { return {adj.data()  + l * max_k, (size_t)adj_count [l]}; }
+  std::span<int> radj_of(int r) { return {radj.data() + r * max_k, (size_t)radj_count[r]}; }
 
   // Level-by-level BFS from free L-nodes.  Returns all free R-nodes reachable
   // at the shortest augmenting-path distance (bfs_depth = the L-layer index at
@@ -101,7 +111,7 @@ struct HopcroftKarp {
     for (int d = 0; !cur.empty(); ++d) {    // first loop: L-layer distance
       nxt.clear();
       for (int l : cur) {                   // second loop: L-nodes at layer d
-        for (int r : adj[l]) {
+        for (int r : adj_of(l)) {
           int l2 = match_r[r];
           if (l2 == -1) {
             free_r.push_back(r);            // free R-node: end of augmenting path
@@ -123,7 +133,7 @@ struct HopcroftKarp {
   // L-nodes on the path must lie at successive dist layers d, d-1, ..., 0.
   // Marking dist[l]=INT_MAX immediately prevents any other DFS from entering l.
   bool dfs(int r, int d) {
-    for (int l : radj[r]) {
+    for (int l : radj_of(r)) {
       if (dist[l] != d) { continue; }
       dist[l] = INT_MAX;                    // mark l used; prevent revisiting
       if (match_l[l] == -1 || dfs(match_l[l], d - 1)) {
@@ -154,6 +164,7 @@ struct HopcroftKarp {
 // ---------------------------------------------------------------------------
 // Build a HopcroftKarp graph from an N×M grid with the puzzle's removal rule
 // for prime s, without running the matching.  Used by benchmarks and tests.
+// Grid nodes have at most 4 neighbors, so max_k=4.
 // ---------------------------------------------------------------------------
 HopcroftKarp buildGridHK(int N, int M, int64_t p, int64_t q, int s) {
   std::vector<int> powP(N + 1), powQ(M + 1);
@@ -174,7 +185,7 @@ HopcroftKarp buildGridHK(int N, int M, int64_t p, int64_t q, int s) {
       else                   { rIdx[f] = nR++; }
     }
   }
-  HopcroftKarp hk(nL, nR);
+  HopcroftKarp hk(nL, nR, /*max_k=*/4);
   const int di[] = {0, 0, 1, -1}, dj[] = {1, -1, 0, 0};
   for (int i = 1; i <= N; ++i) {
     for (int j = 1; j <= M; ++j) {
@@ -197,7 +208,7 @@ HopcroftKarp buildGridHK(int N, int M, int64_t p, int64_t q, int s) {
 // ===========================================================================
 
 TEST(HopcroftKarp, SingleEdge) {
-  HopcroftKarp hk(1, 1);
+  HopcroftKarp hk(1, 1, /*max_k=*/1);
   hk.addEdge(0, 0);
   EXPECT_EQ(hk.maxMatching(), 1);
   EXPECT_EQ(hk.match_l[0], 0);
@@ -206,7 +217,7 @@ TEST(HopcroftKarp, SingleEdge) {
 
 TEST(HopcroftKarp, PathGraph) {
   // L={0,1}, R={0}: edges 0-0, 1-0. Max matching = 1.
-  HopcroftKarp hk(2, 1);
+  HopcroftKarp hk(2, 1, /*max_k=*/1);
   hk.addEdge(0, 0);
   hk.addEdge(1, 0);
   EXPECT_EQ(hk.maxMatching(), 1);
@@ -218,7 +229,7 @@ TEST(HopcroftKarp, PathGraph) {
 
 TEST(HopcroftKarp, StarFromLeft) {
   // L={0}, R={0,1,2,3}: L[0] connects all R. Max matching = 1.
-  HopcroftKarp hk(1, 4);
+  HopcroftKarp hk(1, 4, /*max_k=*/4);
   for (int r = 0; r < 4; ++r) { hk.addEdge(0, r); }
   EXPECT_EQ(hk.maxMatching(), 1);
   EXPECT_NE(hk.match_l[0], -1);
@@ -231,7 +242,7 @@ TEST(HopcroftKarp, StarFromLeft) {
 
 TEST(HopcroftKarp, StarFromRight) {
   // L={0,1,2,3}, R={0}: all L connect R[0]. Max matching = 1.
-  HopcroftKarp hk(4, 1);
+  HopcroftKarp hk(4, 1, /*max_k=*/1);
   for (int l = 0; l < 4; ++l) { hk.addEdge(l, 0); }
   EXPECT_EQ(hk.maxMatching(), 1);
   EXPECT_NE(hk.match_r[0], -1);
@@ -243,7 +254,7 @@ TEST(HopcroftKarp, StarFromRight) {
 }
 
 TEST(HopcroftKarp, PerfectMatching_K22) {
-  HopcroftKarp hk(2, 2);
+  HopcroftKarp hk(2, 2, /*max_k=*/2);
   hk.addEdge(0, 0); hk.addEdge(0, 1);
   hk.addEdge(1, 0); hk.addEdge(1, 1);
   EXPECT_EQ(hk.maxMatching(), 2);
@@ -252,7 +263,7 @@ TEST(HopcroftKarp, PerfectMatching_K22) {
 }
 
 TEST(HopcroftKarp, PerfectMatching_K33) {
-  HopcroftKarp hk(3, 3);
+  HopcroftKarp hk(3, 3, /*max_k=*/3);
   for (int l = 0; l < 3; ++l) {
     for (int r = 0; r < 3; ++r) {
       hk.addEdge(l, r);
@@ -264,7 +275,7 @@ TEST(HopcroftKarp, PerfectMatching_K33) {
 }
 
 TEST(HopcroftKarp, EmptyGraph) {
-  HopcroftKarp hk(3, 3);
+  HopcroftKarp hk(3, 3, /*max_k=*/1);
   EXPECT_EQ(hk.maxMatching(), 0);
   for (int l = 0; l < 3; ++l) { EXPECT_EQ(hk.match_l[l], -1); }
   for (int r = 0; r < 3; ++r) { EXPECT_EQ(hk.match_r[r], -1); }
@@ -272,7 +283,7 @@ TEST(HopcroftKarp, EmptyGraph) {
 
 TEST(HopcroftKarp, DisconnectedComponents) {
   // Two disjoint K_{2,2}: max matching = 4.
-  HopcroftKarp hk(4, 4);
+  HopcroftKarp hk(4, 4, /*max_k=*/2);
   hk.addEdge(0, 0); hk.addEdge(0, 1);
   hk.addEdge(1, 0); hk.addEdge(1, 1);
   hk.addEdge(2, 2); hk.addEdge(2, 3);
@@ -285,7 +296,7 @@ TEST(HopcroftKarp, DisconnectedComponents) {
 TEST(HopcroftKarp, AugmentingPathChain) {
   // Chain requiring multiple BFS rounds:
   // L={0,1,2}, R={0,1,2}. Edges: 0-0, 1-0, 1-1, 2-1, 2-2. Max matching = 3.
-  HopcroftKarp hk(3, 3);
+  HopcroftKarp hk(3, 3, /*max_k=*/2);
   hk.addEdge(0, 0);
   hk.addEdge(1, 0); hk.addEdge(1, 1);
   hk.addEdge(2, 1); hk.addEdge(2, 2);
@@ -296,7 +307,7 @@ TEST(HopcroftKarp, AugmentingPathChain) {
 
 TEST(HopcroftKarp, AsymmetricSizes_K34) {
   // K_{3,4}: max matching = 3 (limited by left side).
-  HopcroftKarp hk(3, 4);
+  HopcroftKarp hk(3, 4, /*max_k=*/4);
   for (int l = 0; l < 3; ++l) {
     for (int r = 0; r < 4; ++r) {
       hk.addEdge(l, r);
@@ -313,7 +324,7 @@ TEST(HopcroftKarp, AsymmetricSizes_K34) {
 
 TEST(HopcroftKarp, MatchConsistency) {
   // After matching, match_l[l]=r iff match_r[r]=l for all l,r.
-  HopcroftKarp hk(5, 5);
+  HopcroftKarp hk(5, 5, /*max_k=*/3);
   hk.addEdge(0, 0); hk.addEdge(0, 2);
   hk.addEdge(1, 1); hk.addEdge(1, 3);
   hk.addEdge(2, 0); hk.addEdge(2, 2); hk.addEdge(2, 4);
@@ -332,7 +343,7 @@ TEST(HopcroftKarp, LargerBipartite_3x3Grid) {
   // Full 3×3 grid bipartite: L=5 (even i+j), R=4 (odd). Max matching = 4.
   // L: 0=(1,1), 1=(1,3), 2=(2,2), 3=(3,1), 4=(3,3)
   // R: 0=(1,2), 1=(2,1), 2=(2,3), 3=(3,2)
-  HopcroftKarp hk(5, 4);
+  HopcroftKarp hk(5, 4, /*max_k=*/4);
   hk.addEdge(0, 0); hk.addEdge(0, 1);
   hk.addEdge(1, 0); hk.addEdge(1, 2);
   hk.addEdge(2, 0); hk.addEdge(2, 1); hk.addEdge(2, 2); hk.addEdge(2, 3);
@@ -445,12 +456,6 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
     for (int j = 1; j <= M; ++j) { acc = acc * q % s; powQ[j] = (int)acc; }
   }
 
-  // removed[i][j] = true if s | (p^i + q^j)
-  // node index: (i-1)*M + (j-1)  for i in [1,N], j in [1,M]
-  // L = even (i+j), R = odd (i+j)
-  // We assign L-index and R-index separately.
-  // lIdx[flat] = L-index (-1 if R or removed)
-  // rIdx[flat] = R-index (-1 if L or removed)
   int total = N * M;
   std::vector<int> lIdx(total, -1), rIdx(total, -1);
   int nL = 0, nR = 0;
@@ -471,8 +476,8 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
     return {nL + nR, 0};
   }
 
-  // Build bipartite graph (L->R edges only)
-  HopcroftKarp hk(nL, nR);
+  // Build bipartite graph (L->R edges only); grid nodes have at most 4 neighbors
+  HopcroftKarp hk(nL, nR, /*max_k=*/4);
   auto flat = [&](int i, int j) { return (i - 1) * M + (j - 1); };
   const int di[] = {0, 0, 1, -1};
   const int dj[] = {1, -1, 0, 0};
@@ -493,30 +498,20 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
   hk.maxMatching();
 
   // DM decomposition
-  // Build directed graph D (as adjacency lists for L->R and R->L):
-  //   matched edge (l,r): add arc r -> l  (stored in radj_matched)
-  //   unmatched edge (l,r): add arc l -> r (stored in ladj_unmatched)
-  // D^T (reverse):
-  //   matched edge (l,r): arc l -> r  (ladj_matched)
-  //   unmatched edge (l,r): arc r -> l (radj_unmatched)
+  // Build directed graph D:
+  //   matched edge (l,r):   arc r -> l  (fromR)
+  //   unmatched edge (l,r): arc l -> r  (fromL)
+  // D^T:
+  //   unmatched edge (l,r): arc r -> l  (fromR_T)
 
-  // We'll store D via two lists:
-  //   fromL[l] = list of r reachable from l in D (unmatched edges l->r)
-  //   fromR[r] = list of l reachable from r in D (matched edges r->l)
-  // And D^T:
-  //   fromL_T[l] = list of r reachable from l in D^T (matched edges l->r)
-  //   fromR_T[r] = list of l reachable from r in D^T (unmatched edges r->l)
-
-  std::vector<std::vector<int>> fromL(nL), fromR(nR);     // in D
-  std::vector<std::vector<int>> fromR_T(nR);               // in D^T (only R->L needed)
+  std::vector<std::vector<int>> fromL(nL), fromR(nR);
+  std::vector<std::vector<int>> fromR_T(nR);
 
   for (int l = 0; l < nL; ++l) {
-    for (int r : hk.adj[l]) {
+    for (int r : hk.adj_of(l)) {
       if (hk.match_l[l] == r) {
-        // matched: in D add r->l; in D^T add r->l reversed => l->r (not needed here)
         fromR[r].push_back(l);
       } else {
-        // unmatched: in D add l->r; in D^T add r->l
         fromL[l].push_back(r);
         fromR_T[r].push_back(l);
       }
@@ -527,9 +522,6 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
   std::vector<bool> notEveryL(nL, false);
   {
     std::queue<int> q;
-    // Seeds: free L-nodes (trivially "A"), then follow D
-    // In D: L-node l can reach R via unmatched edges, then L via matched edges
-    // We interleave L and R visits; track both.
     std::vector<bool> visitedL(nL, false), visitedR(nR, false);
     for (int l = 0; l < nL; ++l) {
       if (hk.match_l[l] == -1) {
@@ -563,14 +555,8 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
   }
 
   // BFS 2: from free R-nodes in D^T, collect reachable R-nodes -> "A"
-  // In D^T: R-node r follows unmatched edges r->l (fromR_T), then l follows
-  // matched edges l->r (which is fromR[r] reversed: for each r, fromR[r] gives
-  // l's matched to r, so in D^T l can reach r via matched edge).
-  // We need: from free R, follow unmatched R->L, then matched L->R, etc.
   std::vector<bool> notEveryR(nR, false);
   {
-    // Build fromL_T: for each l, list of r reachable via matched edge in D^T
-    // In D^T matched edge goes l->r (reverse of r->l in D)
     std::vector<std::vector<int>> fromL_T(nL);
     for (int r = 0; r < nR; ++r) {
       for (int l : fromR[r]) {
@@ -590,7 +576,6 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
     while (!q.empty()) {
       int node = q.front(); q.pop();
       if (node >= nL) {
-        // R-node: follow unmatched edges r->l in D^T
         int r = node - nL;
         for (int l : fromR_T[r]) {
           if (!visitedL[l]) {
@@ -599,7 +584,6 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
           }
         }
       } else {
-        // L-node: follow matched edges l->r in D^T
         int l = node;
         for (int r : fromL_T[l]) {
           if (!visitedR[r]) {
@@ -653,8 +637,6 @@ Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
 bool firstPlayerWinsVG(int N, int M,
                        const std::vector<std::vector<bool>>& removed,
                        int si, int sj) {
-  // State: current position + set of removed squares (bitmask)
-  // Board fits in N*M <= 16 bits for small boards
   assert(N * M <= 20);
   int sz = N * M;
   auto idx = [&](int i, int j) { return i * M + j; };
@@ -665,12 +647,6 @@ bool firstPlayerWinsVG(int N, int M,
     }
   }
 
-  // memo[pos][mask] = true if current player wins
-  // pos: flat index of pawn; mask: removed squares (the pawn's square is
-  // always set in mask after the first move, but at start it's the starting sq)
-  // We represent state as (pos, mask) where mask includes already-removed squares.
-  // At state (pos, mask): current player must move pawn from pos to adjacent
-  // non-removed, non-pos square, then remove pos.
   std::unordered_map<uint64_t, bool> memo;
   std::function<bool(int, uint32_t)> wins = [&](int pos, uint32_t mask) -> bool {
     uint64_t key = ((uint64_t)pos << 32) | mask;
@@ -698,10 +674,7 @@ bool firstPlayerWinsVG(int N, int M,
     return false;
   };
 
-  // Alice places at (si,sj), Bob moves first.
-  // Bob's state: pawn at (si,sj), (si,sj) not yet removed (it gets removed
-  // when Bob moves away).
-  uint32_t mask = initMask; // pre-removed squares only
+  uint32_t mask = initMask;
   return wins(idx(si, sj), mask);
 }
 
@@ -731,7 +704,6 @@ std::vector<std::vector<bool>> buildRemoved(int N, int M, int64_t p, int64_t q,
     for (int i = 1; i <= N; ++i) { acc = acc * p % s; powP[i] = (acc == 0); }
     // recompute properly
   }
-  // Recompute: removed[i][j] for i in [0,N), j in [0,M) (0-indexed for brute force)
   std::vector<int> pp(N + 1), pq(M + 1);
   {
     int64_t acc = 1;
@@ -752,13 +724,8 @@ std::vector<std::vector<bool>> buildRemoved(int N, int M, int64_t p, int64_t q,
 // Test: baseline 3x3 board (no removals) = alternating A/B
 // ---------------------------------------------------------------------------
 TEST(VertexGeography, BaselinePattern) {
-  // No squares removed: use s large enough that nothing is divisible.
-  // Use s=97 (prime), p=1, q=1: labels are 1^i+1^j=2, divisible by 2 not 97.
-  // Simpler: manually test with removed = all false.
   std::vector<std::vector<bool>> removed(3, std::vector<bool>(3, false));
   auto cnt = bruteForceBoard(3, 3, removed);
-  // Baseline 3x3: L-nodes (even i+j, 0-indexed: (0,0),(0,2),(1,1),(2,0),(2,2)) = 5 nodes -> all A
-  // R-nodes (odd i+j: (0,1),(1,0),(1,2),(2,1)) = 4 nodes -> all B
   EXPECT_EQ(cnt.A, 5);
   EXPECT_EQ(cnt.B, 4);
 }
@@ -778,7 +745,6 @@ TEST(VertexGeography, Remove3x3Center) {
 // Test: isolated square is always A
 // ---------------------------------------------------------------------------
 TEST(VertexGeography, IsolatedSquare) {
-  // 1x1 board, no removals: Alice places, Bob can't move -> Bob loses -> A
   std::vector<std::vector<bool>> removed(1, std::vector<bool>(1, false));
   auto cnt = bruteForceBoard(1, 1, removed);
   EXPECT_EQ(cnt.A, 1);
@@ -791,8 +757,6 @@ TEST(VertexGeography, IsolatedSquare) {
 TEST(VertexGeography, Board1x2) {
   std::vector<std::vector<bool>> removed(1, std::vector<bool>(2, false));
   auto cnt = bruteForceBoard(1, 2, removed);
-  // (0,0)=L: Bob moves to (0,1), removes (0,0). Alice can't move. Alice loses -> B
-  // (0,1)=R: Bob moves to (0,0), removes (0,1). Alice can't move. Alice loses -> B
   EXPECT_EQ(cnt.A, 0);
   EXPECT_EQ(cnt.B, 2);
 }
@@ -845,24 +809,17 @@ TEST(ClassifyBoard, SmallBoards_p5_q11) {
 }
 
 TEST(ClassifyBoard, AllSquaresRemoved) {
-  // p=1, q=1: labels = 1^i+1^j = 2, all divisible by 2 -> board empty
   auto cnt = classifyBoard(5, 5, 1, 1, 2);
   EXPECT_EQ(cnt.A, 0);
   EXPECT_EQ(cnt.B, 0);
 }
 
 TEST(ClassifyBoard, NothingRemoved_SmallBoards) {
-  // When s is large prime not dividing any label, board = full grid
-  // Compare classifyBoard with brute force on full grid (no removals)
-  // Use s=97 and choose p,q,N,M such that no p^i+q^j is divisible by 97
-  // p=2, q=3, s=97 (unlikely to hit for small i,j - verify)
-  // Actually just use the brute force on a "no removal" board for verification:
   for (int N = 1; N <= 4; ++N) {
     for (int M = 1; M <= 4; ++M) {
       if (N * M > 16) { continue; }
       std::vector<std::vector<bool>> removed(N, std::vector<bool>(M, false));
       auto expected = bruteForceBoard(N, M, removed);
-      // Use p=2,q=3,s=97: verify no removals happen, then compare
       bool anyRemoved = false;
       for (int i = 1; i <= N && !anyRemoved; ++i) {
         int64_t pi = 1;
@@ -887,7 +844,6 @@ TEST(ClassifyBoard, NothingRemoved_SmallBoards) {
 // N=M=3, p=19, q=2, S=[2,3,5,7,11] -> total A=16, B=19
 // ---------------------------------------------------------------------------
 TEST(Solve, PuzzleExample) {
-  // Compute sum over s in {2,3,5,7,11}
   long long totalA = 0, totalB = 0;
   for (int s : {2, 3, 5, 7, 11}) {
     auto c = classifyBoard(3, 3, 19, 2, s);
@@ -913,7 +869,6 @@ TEST(Solve, SolveHelperMatchesManual) {
     return total;
   };
 
-  // Compare solve() against manual loop for small cases
   auto s1 = solve(3, 3, 19, 2, 12); // primes < 12: {2,3,5,7,11}
   auto m1 = manual(3, 3, 19, 2, {2, 3, 5, 7, 11});
   EXPECT_EQ(s1.A, m1.A);
@@ -925,29 +880,19 @@ TEST(Solve, SolveHelperMatchesManual) {
   EXPECT_EQ(s2.B, m2.B);
 }
 
-// ---------------------------------------------------------------------------
-// Test: specific squares classified correctly (manual verification)
-// ---------------------------------------------------------------------------
 TEST(ClassifyBoard, SpecificSquare_3x3_s5_p19_q2) {
-  // With s=5, only center (2,2) is removed; all 8 remaining are B.
   auto cnt = classifyBoard(3, 3, 19, 2, 5);
   EXPECT_EQ(cnt.A, 0);
   EXPECT_EQ(cnt.B, 8);
 }
 
 TEST(ClassifyBoard, SpecificSquare_3x3_s2_p19_q2) {
-  // s=2, p=19 (odd), q=2 (even): 19^i+2^j = odd+even = odd -> never divisible by 2
-  // Full 3x3 board: A=5, B=4
   auto cnt = classifyBoard(3, 3, 19, 2, 2);
   EXPECT_EQ(cnt.A, 5);
   EXPECT_EQ(cnt.B, 4);
 }
 
-// ---------------------------------------------------------------------------
-// Test: larger boards - classifyBoard vs brute force
-// ---------------------------------------------------------------------------
 TEST(ClassifyBoard, MediumBoards_BruteForceCheck) {
-  // 4x4 boards with various primes
   struct Case { int N, M; int64_t p, q; int s; };
   std::vector<Case> cases = {
     {4, 4, 19, 2, 3},
@@ -965,9 +910,6 @@ TEST(ClassifyBoard, MediumBoards_BruteForceCheck) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test: rectangular boards
-// ---------------------------------------------------------------------------
 TEST(ClassifyBoard, RectangularBoards) {
   for (int s : {3, 5, 7}) {
     checkMatchesBruteForce(2, 3, 19, 2, s);
@@ -977,9 +919,6 @@ TEST(ClassifyBoard, RectangularBoards) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test: sieve correctness
-// ---------------------------------------------------------------------------
 TEST(Sieve, PrimesBelow100) {
   auto primes = primesBelow(100);
   EXPECT_EQ(primes.size(), 25u);
@@ -992,16 +931,12 @@ TEST(Sieve, PrimesBelow12) {
   EXPECT_EQ(primes, (std::vector<int>{2, 3, 5, 7, 11}));
 }
 
-// ---------------------------------------------------------------------------
-// Test: A+B = number of non-removed squares (sanity check)
-// ---------------------------------------------------------------------------
 TEST(Sanity, ABSumEqualsNonRemoved) {
   struct Case { int N, M; int64_t p, q; int s; };
   std::vector<Case> cases = {
     {3, 3, 19, 2, 2}, {3, 3, 19, 2, 5}, {4, 4, 7, 3, 3}, {5, 5, 11, 7, 5},
   };
   for (auto& c : cases) {
-    // Count non-removed squares manually
     std::vector<int> pp(c.N + 1), pq(c.M + 1);
     int64_t acc = 1;
     for (int i = 1; i <= c.N; ++i) { acc = acc * (c.p % c.s) % c.s; pp[i] = (int)acc; }
@@ -1019,9 +954,6 @@ TEST(Sanity, ABSumEqualsNonRemoved) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test: larger cross-check against brute force (5x4 boards)
-// ---------------------------------------------------------------------------
 TEST(ClassifyBoard, Board5x4_BruteForce) {
   for (int s : {3, 5, 7}) {
     checkMatchesBruteForce(4, 4, 19, 2, s);
