@@ -681,7 +681,7 @@ Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
     auto c = classifyBoard(N, M, p, q, s);
     totalA += c.A;
     totalB += c.B;
-    LOG(INFO) << "s=" << s << " A=" << c.A << " B=" << c.B;
+    DLOG(INFO) << "s=" << s << " A=" << c.A << " B=" << c.B;
   }
   return {totalA, totalB};
 }
