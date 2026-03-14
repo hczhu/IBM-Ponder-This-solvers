@@ -674,7 +674,7 @@ Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
     auto c = classifyBoard(N, M, p, q, s);
     total.A += c.A;
     total.B += c.B;
-    DLOG(INFO) << "s=" << s << " A=" << c.A << " B=" << c.B;
+    LOG(INFO) << "s=" << s << " A=" << c.A << " B=" << c.B;
   }
   return total;
 }
@@ -690,7 +690,7 @@ Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
 bool firstPlayerWinsVG(int N, int M,
                        const std::vector<std::vector<bool>>& removed,
                        int si, int sj) {
-  assert(N * M <= 20);
+  assert(N * M <= 25);
   int sz = N * M;
   auto idx = [&](int i, int j) { return i * M + j; };
   uint32_t initMask = 0;
@@ -1011,6 +1011,24 @@ TEST(ClassifyBoard, Board5x4_BruteForce) {
   for (int s : {3, 5, 7}) {
     checkMatchesBruteForce(4, 4, 19, 2, s);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Test: 5×5 board — largest size the brute-force game-tree search can handle
+// (assert in firstPlayerWinsVG limits N*M <= 25).
+//
+// p=19, q=2, s=3:  19≡1 mod 3 and 2^j≡{2,1,2,1,2} mod 3 for j=1..5,
+//   so (1 + 2^j) mod 3 = 0 for j odd.  All 15 squares with j in {1,3,5} are
+//   removed; only columns j=2,4 survive (10 squares, fast for brute-force).
+//   Those two columns are independent 5×1 paths; no cross-column edges remain.
+//
+// p=19, q=2, s=5:  19≡4 mod 5, 2^j mod 5 cycles {2,4,3,1,2,...}.
+//   Removed squares: (4+2^j)%5==0 => 2^j≡1 mod 5 => j≡0 mod 4 => j=4 only.
+//   5 squares removed (all i, j=4); 20 survive — still feasible.
+// ---------------------------------------------------------------------------
+TEST(ClassifyBoard, Board5x5_BruteForce) {
+  checkMatchesBruteForce(5, 5, 19, 2, 3);
+  checkMatchesBruteForce(5, 5, 19, 2, 5);
 }
 
 // ===========================================================================
