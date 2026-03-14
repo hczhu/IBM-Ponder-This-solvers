@@ -63,6 +63,58 @@ std::vector<int> primesBelow(int limit) {
   return primes;
 }
 
+TEST(Sieve, Empty) {
+  EXPECT_TRUE(primesBelow(0).empty());
+  EXPECT_TRUE(primesBelow(1).empty());
+  EXPECT_TRUE(primesBelow(2).empty());
+}
+
+TEST(Sieve, SmallValues) {
+  EXPECT_EQ(primesBelow(3),  (std::vector<int>{2}));
+  EXPECT_EQ(primesBelow(4),  (std::vector<int>{2, 3}));
+  EXPECT_EQ(primesBelow(12), (std::vector<int>{2, 3, 5, 7, 11}));
+}
+
+TEST(Sieve, ExclusiveUpperBound) {
+  // limit itself must not be included even when it is prime
+  auto p10 = primesBelow(10);
+  EXPECT_EQ(p10.back(), 7);
+  auto p11 = primesBelow(11);
+  EXPECT_EQ(p11.back(), 7);
+  auto p12 = primesBelow(12);
+  EXPECT_EQ(p12.back(), 11);
+}
+
+TEST(Sieve, Count100) {
+  // There are 25 primes below 100
+  EXPECT_EQ(primesBelow(100).size(), 25u);
+  EXPECT_EQ(primesBelow(100).front(), 2);
+  EXPECT_EQ(primesBelow(100).back(), 97);
+}
+
+TEST(Sieve, AllPrimesArePrime) {
+  // Every returned value must actually be prime (no composite sneaks in)
+  for (int p : primesBelow(200)) {
+    for (int d = 2; d * d <= p; ++d) {
+      EXPECT_NE(p % d, 0) << p << " is not prime";
+    }
+  }
+}
+
+TEST(Sieve, NoneSkipped) {
+  // Every prime below limit must appear (no prime is missing)
+  auto primes = primesBelow(200);
+  std::vector<bool> inResult(200, false);
+  for (int p : primes) { inResult[p] = true; }
+  for (int n = 2; n < 200; ++n) {
+    bool isPrime = true;
+    for (int d = 2; d * d <= n; ++d) {
+      if (n % d == 0) { isPrime = false; break; }
+    }
+    EXPECT_EQ(inResult[n], isPrime) << "n=" << n;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Hopcroft-Karp bipartite matching
 //
