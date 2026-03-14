@@ -74,62 +74,75 @@ std::vector<int> primesBelow(int limit) {
 // ---------------------------------------------------------------------------
 struct HopcroftKarp {
   int nL, nR;
-  std::vector<std::vector<int>> adj; // adj[l] -> list of r
+  std::vector<std::vector<int>> adj;   // adj[l]  = list of r neighbors
+  std::vector<std::vector<int>> radj;  // radj[r] = list of l neighbors (reverse)
   std::vector<int> match_l, match_r, dist;
+  int bfs_depth = 0;
 
   HopcroftKarp(int nL, int nR)
-      : nL(nL), nR(nR), adj(nL), match_l(nL, -1), match_r(nR, -1),
-        dist(nL) {}
+      : nL(nL), nR(nR), adj(nL), radj(nR),
+        match_l(nL, -1), match_r(nR, -1), dist(nL) {}
 
-  void addEdge(int l, int r) { adj[l].push_back(r); }
+  void addEdge(int l, int r) {
+    adj[l].push_back(r);
+    radj[r].push_back(l);
+  }
 
-  bool bfs() {
-    // Level-by-level BFS. Exit the outer (distance) loop as soon as any free
-    // R-node is discovered — augmenting paths of this length exist and there
-    // is no need to expand to the next level.
-    std::vector<int> cur, nxt;
+  // Level-by-level BFS from free L-nodes.  Returns all free R-nodes reachable
+  // at the shortest augmenting-path distance (bfs_depth = the L-layer index at
+  // which those R-nodes were discovered).  An empty return means no augmenting
+  // path exists.
+  std::vector<int> bfs() {
+    std::vector<int> cur, nxt, free_r;
     for (int l = 0; l < nL; ++l) {
       if (match_l[l] == -1) { dist[l] = 0; cur.push_back(l); }
       else                    dist[l] = INT_MAX;
     }
-    for (int d = 0; !cur.empty(); ++d) {    // first loop: distance
-      bool found = false;
+    for (int d = 0; !cur.empty(); ++d) {    // first loop: L-layer distance
       nxt.clear();
-      for (int l : cur) {                   // second loop: nodes at distance d
+      for (int l : cur) {                   // second loop: L-nodes at layer d
         for (int r : adj[l]) {
           int l2 = match_r[r];
           if (l2 == -1) {
-            found = true;                   // free R-node → augmenting path
+            free_r.push_back(r);            // free R-node: end of augmenting path
           } else if (dist[l2] == INT_MAX) {
             dist[l2] = d + 1;
             nxt.push_back(l2);
           }
         }
       }
-      if (found) { return true; }           // exit first loop
+      if (!free_r.empty()) { bfs_depth = d; return free_r; }  // exit first loop
       std::swap(cur, nxt);
     }
-    return false;
+    return free_r;  // empty: no augmenting paths
   }
 
-  bool dfs(int l) {
-    for (int r : adj[l]) {
-      int l2 = match_r[r];
-      if (l2 == -1 || (dist[l2] == dist[l] + 1 && dfs(l2))) {
+  // DFS in the *reverse* layered graph starting from R-node r.
+  // Traverses: unmatched R→L (via radj), then matched L→R (via match_l),
+  // alternating until a free L-node (dist==0, match_l==-1) is reached.
+  // L-nodes on the path must lie at successive dist layers d, d-1, ..., 0.
+  // Marking dist[l]=INT_MAX immediately prevents any other DFS from entering l.
+  bool dfs(int r, int d) {
+    for (int l : radj[r]) {
+      if (dist[l] != d) { continue; }
+      dist[l] = INT_MAX;                    // mark l used; prevent revisiting
+      if (match_l[l] == -1 || dfs(match_l[l], d - 1)) {
         match_l[l] = r;
         match_r[r] = l;
         return true;
       }
     }
-    dist[l] = INT_MAX;
     return false;
   }
 
   int maxMatching() {
     int res = 0;
-    while (bfs()) {
-      for (int l = 0; l < nL; ++l) {
-        if (match_l[l] == -1 && dfs(l)) {
+    std::vector<int> free_r;
+    while (!(free_r = bfs()).empty()) {
+      for (int r : free_r) {
+        // match_r[r]==-1 guards against duplicate entries in free_r and against
+        // a free R-node that was already matched by an earlier dfs() this phase.
+        if (match_r[r] == -1 && dfs(r, bfs_depth)) {
           ++res;
         }
       }
