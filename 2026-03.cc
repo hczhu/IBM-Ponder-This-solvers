@@ -83,6 +83,8 @@ struct HopcroftKarp {
   std::vector<int> radj,       radj_count;  // radj[r*max_k + i], radj_count[r]
   std::vector<int> match_l, match_r, dist;
   int bfs_depth = 0;
+  // Reused across bfs() calls to avoid repeated heap allocation/deallocation.
+  std::vector<int> bfs_cur, bfs_nxt, bfs_free_r;
 
   HopcroftKarp(int nL, int nR, int max_k)
       : nL(nL), nR(nR), max_k(max_k),
@@ -102,29 +104,29 @@ struct HopcroftKarp {
   // at the shortest augmenting-path distance (bfs_depth = the L-layer index at
   // which those R-nodes were discovered).  An empty return means no augmenting
   // path exists.
-  std::vector<int> bfs() {
-    std::vector<int> cur, nxt, free_r;
+  const std::vector<int>& bfs() {
+    bfs_cur.clear(); bfs_nxt.clear(); bfs_free_r.clear();
     for (int l = 0; l < nL; ++l) {
-      if (match_l[l] == -1) { dist[l] = 0; cur.push_back(l); }
+      if (match_l[l] == -1) { dist[l] = 0; bfs_cur.push_back(l); }
       else                    dist[l] = INT_MAX;
     }
-    for (int d = 0; !cur.empty(); ++d) {    // first loop: L-layer distance
-      nxt.clear();
-      for (int l : cur) {                   // second loop: L-nodes at layer d
+    for (int d = 0; !bfs_cur.empty(); ++d) {    // first loop: L-layer distance
+      bfs_nxt.clear();
+      for (int l : bfs_cur) {                    // second loop: L-nodes at layer d
         for (int r : adj_of(l)) {
           int l2 = match_r[r];
           if (l2 == -1) {
-            free_r.push_back(r);            // free R-node: end of augmenting path
+            bfs_free_r.push_back(r);             // free R-node: end of augmenting path
           } else if (dist[l2] == INT_MAX) {
             dist[l2] = d + 1;
-            nxt.push_back(l2);
+            bfs_nxt.push_back(l2);
           }
         }
       }
-      if (!free_r.empty()) { bfs_depth = d; return free_r; }  // exit first loop
-      std::swap(cur, nxt);
+      if (!bfs_free_r.empty()) { bfs_depth = d; return bfs_free_r; }  // exit first loop
+      std::swap(bfs_cur, bfs_nxt);
     }
-    return free_r;  // empty: no augmenting paths
+    return bfs_free_r;  // empty: no augmenting paths
   }
 
   // DFS in the *reverse* layered graph starting from R-node r.
@@ -147,11 +149,10 @@ struct HopcroftKarp {
 
   int maxMatching() {
     int res = 0;
-    std::vector<int> free_r;
-    while (!(free_r = bfs()).empty()) {
-      for (int r : free_r) {
-        // match_r[r]==-1 guards against duplicate entries in free_r and against
-        // a free R-node that was already matched by an earlier dfs() this phase.
+    while (!bfs().empty()) {
+      for (int r : bfs_free_r) {
+        // match_r[r]==-1 guards against duplicate entries in bfs_free_r and
+        // against a free R-node matched by an earlier dfs() this phase.
         if (match_r[r] == -1 && dfs(r, bfs_depth)) {
           ++res;
         }
