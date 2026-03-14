@@ -686,6 +686,16 @@ Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
   return {totalA, totalB};
 }
 
+// Benchmark solve() over all primes < 100 on a 157×157 board.
+// Run with OMP_NUM_THREADS=1 vs default to observe parallelization speedup.
+static void BM_Solve_157x157(benchmark::State& state) {
+  for (auto _ : state) {
+    auto c = solve(157, 157, 419, 211, 100);
+    benchmark::DoNotOptimize(c.A);
+  }
+}
+BENCHMARK(BM_Solve_157x157)->Unit(benchmark::kMillisecond);
+
 // ===========================================================================
 // Unit Tests
 // ===========================================================================
