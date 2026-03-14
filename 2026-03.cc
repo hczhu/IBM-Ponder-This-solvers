@@ -40,6 +40,7 @@
 #include <string>
 #include <vector>
 
+#include <benchmark/benchmark.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -53,8 +54,9 @@ std::vector<int> primesBelow(int limit) {
   for (int i = 2; i < limit; ++i) {
     if (!composite[i]) {
       primes.push_back(i);
-      for (long long j = (long long)i * i; j < limit; j += i)
+      for (long long j = (long long)i * i; j < limit; j += i) {
         composite[j] = true;
+      }
     }
   }
   return primes;
@@ -82,29 +84,32 @@ struct HopcroftKarp {
   void addEdge(int l, int r) { adj[l].push_back(r); }
 
   bool bfs() {
-    std::queue<int> q;
+    // Level-by-level BFS. Exit the outer (distance) loop as soon as any free
+    // R-node is discovered — augmenting paths of this length exist and there
+    // is no need to expand to the next level.
+    std::vector<int> cur, nxt;
     for (int l = 0; l < nL; ++l) {
-      if (match_l[l] == -1) {
-        dist[l] = 0;
-        q.push(l);
-      } else {
-        dist[l] = INT_MAX;
-      }
+      if (match_l[l] == -1) { dist[l] = 0; cur.push_back(l); }
+      else                    dist[l] = INT_MAX;
     }
-    bool found = false;
-    while (!q.empty()) {
-      int l = q.front(); q.pop();
-      for (int r : adj[l]) {
-        int l2 = match_r[r];
-        if (l2 == -1) {
-          found = true;
-        } else if (dist[l2] == INT_MAX) {
-          dist[l2] = dist[l] + 1;
-          q.push(l2);
+    for (int d = 0; !cur.empty(); ++d) {    // first loop: distance
+      bool found = false;
+      nxt.clear();
+      for (int l : cur) {                   // second loop: nodes at distance d
+        for (int r : adj[l]) {
+          int l2 = match_r[r];
+          if (l2 == -1) {
+            found = true;                   // free R-node → augmenting path
+          } else if (dist[l2] == INT_MAX) {
+            dist[l2] = d + 1;
+            nxt.push_back(l2);
+          }
         }
       }
+      if (found) return true;               // exit first loop
+      std::swap(cur, nxt);
     }
-    return found;
+    return false;
   }
 
   bool dfs(int l) {
@@ -129,6 +134,263 @@ struct HopcroftKarp {
     return res;
   }
 };
+
+// ---------------------------------------------------------------------------
+// Build a HopcroftKarp graph from an N×M grid with the puzzle's removal rule
+// for prime s, without running the matching.  Used by benchmarks and tests.
+// ---------------------------------------------------------------------------
+HopcroftKarp buildGridHK(int N, int M, int64_t p, int64_t q, int s) {
+  std::vector<int> powP(N + 1), powQ(M + 1);
+  {
+    int64_t acc = 1;
+    for (int i = 1; i <= N; ++i) { acc = acc * p % s; powP[i] = (int)acc; }
+    acc = 1;
+    for (int j = 1; j <= M; ++j) { acc = acc * q % s; powQ[j] = (int)acc; }
+  }
+  int total = N * M;
+  std::vector<int> lIdx(total, -1), rIdx(total, -1);
+  int nL = 0, nR = 0;
+  for (int i = 1; i <= N; ++i)
+    for (int j = 1; j <= M; ++j) {
+      if ((powP[i] + powQ[j]) % s == 0) continue;
+      int f = (i - 1) * M + (j - 1);
+      if ((i + j) % 2 == 0) lIdx[f] = nL++;
+      else                   rIdx[f] = nR++;
+    }
+  HopcroftKarp hk(nL, nR);
+  const int di[] = {0, 0, 1, -1}, dj[] = {1, -1, 0, 0};
+  for (int i = 1; i <= N; ++i)
+    for (int j = 1; j <= M; ++j) {
+      int f = (i - 1) * M + (j - 1);
+      if (lIdx[f] == -1) continue;
+      for (int d = 0; d < 4; ++d) {
+        int ni = i + di[d], nj = j + dj[d];
+        if (ni < 1 || ni > N || nj < 1 || nj > M) continue;
+        int nf = (ni - 1) * M + (nj - 1);
+        if (rIdx[nf] == -1) continue;
+        hk.addEdge(lIdx[f], rIdx[nf]);
+      }
+    }
+  return hk;
+}
+
+// ===========================================================================
+// HopcroftKarp Unit Tests  (placed here for locality with the implementation)
+// ===========================================================================
+
+TEST(HopcroftKarp, SingleEdge) {
+  HopcroftKarp hk(1, 1);
+  hk.addEdge(0, 0);
+  EXPECT_EQ(hk.maxMatching(), 1);
+  EXPECT_EQ(hk.match_l[0], 0);
+  EXPECT_EQ(hk.match_r[0], 0);
+}
+
+TEST(HopcroftKarp, PathGraph) {
+  // L={0,1}, R={0}: edges 0-0, 1-0. Max matching = 1.
+  HopcroftKarp hk(2, 1);
+  hk.addEdge(0, 0);
+  hk.addEdge(1, 0);
+  EXPECT_EQ(hk.maxMatching(), 1);
+  int matched = (hk.match_l[0] != -1 ? 0 : 1);
+  EXPECT_EQ(hk.match_l[matched], 0);
+  EXPECT_EQ(hk.match_l[1 - matched], -1);
+  EXPECT_EQ(hk.match_r[0], matched);
+}
+
+TEST(HopcroftKarp, StarFromLeft) {
+  // L={0}, R={0,1,2,3}: L[0] connects all R. Max matching = 1.
+  HopcroftKarp hk(1, 4);
+  for (int r = 0; r < 4; ++r) hk.addEdge(0, r);
+  EXPECT_EQ(hk.maxMatching(), 1);
+  EXPECT_NE(hk.match_l[0], -1);
+  int mr = hk.match_l[0];
+  EXPECT_EQ(hk.match_r[mr], 0);
+  for (int r = 0; r < 4; ++r)
+    if (r != mr) { EXPECT_EQ(hk.match_r[r], -1); }
+}
+
+TEST(HopcroftKarp, StarFromRight) {
+  // L={0,1,2,3}, R={0}: all L connect R[0]. Max matching = 1.
+  HopcroftKarp hk(4, 1);
+  for (int l = 0; l < 4; ++l) hk.addEdge(l, 0);
+  EXPECT_EQ(hk.maxMatching(), 1);
+  EXPECT_NE(hk.match_r[0], -1);
+  int ml = hk.match_r[0];
+  EXPECT_EQ(hk.match_l[ml], 0);
+  for (int l = 0; l < 4; ++l)
+    if (l != ml) { EXPECT_EQ(hk.match_l[l], -1); }
+}
+
+TEST(HopcroftKarp, PerfectMatching_K22) {
+  HopcroftKarp hk(2, 2);
+  hk.addEdge(0, 0); hk.addEdge(0, 1);
+  hk.addEdge(1, 0); hk.addEdge(1, 1);
+  EXPECT_EQ(hk.maxMatching(), 2);
+  for (int l = 0; l < 2; ++l) EXPECT_NE(hk.match_l[l], -1);
+  for (int r = 0; r < 2; ++r) EXPECT_NE(hk.match_r[r], -1);
+}
+
+TEST(HopcroftKarp, PerfectMatching_K33) {
+  HopcroftKarp hk(3, 3);
+  for (int l = 0; l < 3; ++l)
+    for (int r = 0; r < 3; ++r)
+      hk.addEdge(l, r);
+  EXPECT_EQ(hk.maxMatching(), 3);
+  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
+  for (int r = 0; r < 3; ++r) EXPECT_NE(hk.match_r[r], -1);
+}
+
+TEST(HopcroftKarp, EmptyGraph) {
+  HopcroftKarp hk(3, 3);
+  EXPECT_EQ(hk.maxMatching(), 0);
+  for (int l = 0; l < 3; ++l) EXPECT_EQ(hk.match_l[l], -1);
+  for (int r = 0; r < 3; ++r) EXPECT_EQ(hk.match_r[r], -1);
+}
+
+TEST(HopcroftKarp, DisconnectedComponents) {
+  // Two disjoint K_{2,2}: max matching = 4.
+  HopcroftKarp hk(4, 4);
+  hk.addEdge(0, 0); hk.addEdge(0, 1);
+  hk.addEdge(1, 0); hk.addEdge(1, 1);
+  hk.addEdge(2, 2); hk.addEdge(2, 3);
+  hk.addEdge(3, 2); hk.addEdge(3, 3);
+  EXPECT_EQ(hk.maxMatching(), 4);
+  for (int l = 0; l < 4; ++l) EXPECT_NE(hk.match_l[l], -1);
+  for (int r = 0; r < 4; ++r) EXPECT_NE(hk.match_r[r], -1);
+}
+
+TEST(HopcroftKarp, AugmentingPathChain) {
+  // Chain requiring multiple BFS rounds:
+  // L={0,1,2}, R={0,1,2}. Edges: 0-0, 1-0, 1-1, 2-1, 2-2. Max matching = 3.
+  HopcroftKarp hk(3, 3);
+  hk.addEdge(0, 0);
+  hk.addEdge(1, 0); hk.addEdge(1, 1);
+  hk.addEdge(2, 1); hk.addEdge(2, 2);
+  EXPECT_EQ(hk.maxMatching(), 3);
+  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
+  for (int r = 0; r < 3; ++r) EXPECT_NE(hk.match_r[r], -1);
+}
+
+TEST(HopcroftKarp, AsymmetricSizes_K34) {
+  // K_{3,4}: max matching = 3 (limited by left side).
+  HopcroftKarp hk(3, 4);
+  for (int l = 0; l < 3; ++l)
+    for (int r = 0; r < 4; ++r)
+      hk.addEdge(l, r);
+  EXPECT_EQ(hk.maxMatching(), 3);
+  for (int l = 0; l < 3; ++l) EXPECT_NE(hk.match_l[l], -1);
+  int matchedR = 0;
+  for (int r = 0; r < 4; ++r) if (hk.match_r[r] != -1) ++matchedR;
+  EXPECT_EQ(matchedR, 3);
+}
+
+TEST(HopcroftKarp, MatchConsistency) {
+  // After matching, match_l[l]=r iff match_r[r]=l for all l,r.
+  HopcroftKarp hk(5, 5);
+  hk.addEdge(0, 0); hk.addEdge(0, 2);
+  hk.addEdge(1, 1); hk.addEdge(1, 3);
+  hk.addEdge(2, 0); hk.addEdge(2, 2); hk.addEdge(2, 4);
+  hk.addEdge(3, 1); hk.addEdge(3, 3);
+  hk.addEdge(4, 4);
+  hk.maxMatching();
+  for (int l = 0; l < 5; ++l)
+    if (hk.match_l[l] != -1) { EXPECT_EQ(hk.match_r[hk.match_l[l]], l) << "l=" << l; }
+  for (int r = 0; r < 5; ++r)
+    if (hk.match_r[r] != -1) { EXPECT_EQ(hk.match_l[hk.match_r[r]], r) << "r=" << r; }
+}
+
+TEST(HopcroftKarp, LargerBipartite_3x3Grid) {
+  // Full 3×3 grid bipartite: L=5 (even i+j), R=4 (odd). Max matching = 4.
+  // L: 0=(1,1), 1=(1,3), 2=(2,2), 3=(3,1), 4=(3,3)
+  // R: 0=(1,2), 1=(2,1), 2=(2,3), 3=(3,2)
+  HopcroftKarp hk(5, 4);
+  hk.addEdge(0, 0); hk.addEdge(0, 1);
+  hk.addEdge(1, 0); hk.addEdge(1, 2);
+  hk.addEdge(2, 0); hk.addEdge(2, 1); hk.addEdge(2, 2); hk.addEdge(2, 3);
+  hk.addEdge(3, 1); hk.addEdge(3, 3);
+  hk.addEdge(4, 2); hk.addEdge(4, 3);
+  EXPECT_EQ(hk.maxMatching(), 4);
+  for (int r = 0; r < 4; ++r) EXPECT_NE(hk.match_r[r], -1) << "r=" << r;
+  int freeL = 0;
+  for (int l = 0; l < 5; ++l) if (hk.match_l[l] == -1) ++freeL;
+  EXPECT_EQ(freeL, 1);
+}
+
+TEST(HopcroftKarp, GridDerived_KnownMatchingSize) {
+  // p=3, q=5, s=97: 3^i+5^j for i,j in [1,7] never reaches 97 (max=81+40=121,
+  // 121%97=24), so no squares are removed and we get a clean full grid.
+
+  // Full 4×4 grid: L=8, R=8, perfect matching exists -> max matching = 8.
+  {
+    auto hk = buildGridHK(4, 4, 3, 5, 97);
+    EXPECT_EQ(hk.nL, 8);
+    EXPECT_EQ(hk.nR, 8);
+    EXPECT_EQ(hk.maxMatching(), 8);
+    for (int l = 0; l < hk.nL; ++l) EXPECT_NE(hk.match_l[l], -1);
+    for (int r = 0; r < hk.nR; ++r) EXPECT_NE(hk.match_r[r], -1);
+  }
+  // 1×N strip (path graph): L=⌈N/2⌉, R=⌊N/2⌋. Max matching = ⌊N/2⌋.
+  for (int N : {3, 4, 5, 6, 7}) {
+    auto hk = buildGridHK(1, N, 3, 5, 97);
+    EXPECT_EQ(hk.nL + hk.nR, N) << "N=" << N; // no removals
+    EXPECT_EQ(hk.maxMatching(), N / 2) << "N=" << N;
+  }
+}
+
+TEST(HopcroftKarp, GridDerived_p419_q211) {
+  // Use actual puzzle parameters for small grids; verify consistency.
+  for (int s : {3, 5, 7, 11, 13}) {
+    auto hk = buildGridHK(10, 10, 419, 211, s);
+    int m = hk.maxMatching();
+    // Matching must not exceed min(nL, nR)
+    EXPECT_LE(m, std::min(hk.nL, hk.nR));
+    // Consistency check
+    for (int l = 0; l < hk.nL; ++l)
+      if (hk.match_l[l] != -1) { EXPECT_EQ(hk.match_r[hk.match_l[l]], l); }
+    for (int r = 0; r < hk.nR; ++r)
+      if (hk.match_r[r] != -1) { EXPECT_EQ(hk.match_l[hk.match_r[r]], r); }
+  }
+}
+
+// ===========================================================================
+// Benchmarks for HopcroftKarp on large grids
+//
+// Graphs are derived from 1557×1557 boards with p=419, q=211 and various
+// primes s.  Different primes give different removal densities (~1/s of
+// squares removed), exercising both sparse and dense graph regimes.
+//
+// PauseTiming() / ResumeTiming() isolate matching from graph construction.
+// ===========================================================================
+
+static void BM_HopcroftKarp_1557x1557(benchmark::State& state, int s) {
+  for (auto _ : state) {
+    state.PauseTiming();
+    auto hk = buildGridHK(1557, 1557, 419, 211, s);
+    state.ResumeTiming();
+    int m = hk.maxMatching();
+    benchmark::DoNotOptimize(m);
+  }
+}
+
+// s=3: ~1/3 squares removed, moderate-density graph
+BENCHMARK_CAPTURE(BM_HopcroftKarp_1557x1557, s3,  3)->Unit(benchmark::kMillisecond);
+// s=5: ~1/5 squares removed
+BENCHMARK_CAPTURE(BM_HopcroftKarp_1557x1557, s5,  5)->Unit(benchmark::kMillisecond);
+// s=7: ~1/7 squares removed
+BENCHMARK_CAPTURE(BM_HopcroftKarp_1557x1557, s7,  7)->Unit(benchmark::kMillisecond);
+// s=97: ~1/97 squares removed, near-full grid (dense, close to perfect matching)
+BENCHMARK_CAPTURE(BM_HopcroftKarp_1557x1557, s97, 97)->Unit(benchmark::kMillisecond);
+
+// Benchmark graph construction separately (so matching cost can be inferred)
+static void BM_BuildGridHK_1557x1557(benchmark::State& state, int s) {
+  for (auto _ : state) {
+    auto hk = buildGridHK(1557, 1557, 419, 211, s);
+    benchmark::DoNotOptimize(hk.adj.data());
+  }
+}
+BENCHMARK_CAPTURE(BM_BuildGridHK_1557x1557, s3,  3)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_BuildGridHK_1557x1557, s97, 97)->Unit(benchmark::kMillisecond);
 
 // ---------------------------------------------------------------------------
 // Board classification for a single prime s
@@ -677,72 +939,6 @@ TEST(ClassifyBoard, RectangularBoards) {
 }
 
 // ---------------------------------------------------------------------------
-// Test: Hopcroft-Karp correctness on known graphs
-// ---------------------------------------------------------------------------
-TEST(HopcroftKarp, PathGraph) {
-  // L={0,1}, R={0}: edges 0-0, 1-0. Max matching = 1.
-  HopcroftKarp hk(2, 1);
-  hk.addEdge(0, 0);
-  hk.addEdge(1, 0);
-  EXPECT_EQ(hk.maxMatching(), 1);
-  // One of l0,l1 matched, the other free
-  int matched = (hk.match_l[0] != -1 ? 0 : 1);
-  int free = 1 - matched;
-  EXPECT_EQ(hk.match_l[matched], 0);
-  EXPECT_EQ(hk.match_l[free], -1);
-  EXPECT_EQ(hk.match_r[0], matched);
-}
-
-TEST(HopcroftKarp, PerfectMatching) {
-  // K_{2,2}: max matching = 2
-  HopcroftKarp hk(2, 2);
-  hk.addEdge(0, 0); hk.addEdge(0, 1);
-  hk.addEdge(1, 0); hk.addEdge(1, 1);
-  EXPECT_EQ(hk.maxMatching(), 2);
-  // Both L and R nodes must be matched
-  EXPECT_NE(hk.match_l[0], -1);
-  EXPECT_NE(hk.match_l[1], -1);
-  EXPECT_NE(hk.match_r[0], -1);
-  EXPECT_NE(hk.match_r[1], -1);
-}
-
-TEST(HopcroftKarp, EmptyGraph) {
-  HopcroftKarp hk(3, 3);
-  EXPECT_EQ(hk.maxMatching(), 0);
-  for (int l = 0; l < 3; ++l) EXPECT_EQ(hk.match_l[l], -1);
-  for (int r = 0; r < 3; ++r) EXPECT_EQ(hk.match_r[r], -1);
-}
-
-TEST(HopcroftKarp, LargerBipartite) {
-  // 3x3 grid, full bipartite: L=5 (even i+j), R=4 (odd i+j)
-  // Max matching = 4
-  HopcroftKarp hk(5, 4);
-  // Map: (i,j) with i+j even -> L, else R (1-indexed, 3x3)
-  // L: (1,1)->0, (1,3)->1, (2,2)->2, (3,1)->3, (3,3)->4
-  // R: (1,2)->0, (2,1)->1, (2,3)->2, (3,2)->3
-  // Edges:
-  hk.addEdge(0, 0); // (1,1)-(1,2)
-  hk.addEdge(0, 1); // (1,1)-(2,1)
-  hk.addEdge(1, 0); // (1,3)-(1,2)
-  hk.addEdge(1, 2); // (1,3)-(2,3)
-  hk.addEdge(2, 0); // (2,2)-(1,2)
-  hk.addEdge(2, 1); // (2,2)-(2,1)
-  hk.addEdge(2, 2); // (2,2)-(2,3)
-  hk.addEdge(2, 3); // (2,2)-(3,2)
-  hk.addEdge(3, 1); // (3,1)-(2,1)
-  hk.addEdge(3, 3); // (3,1)-(3,2)
-  hk.addEdge(4, 2); // (3,3)-(2,3)
-  hk.addEdge(4, 3); // (3,3)-(3,2)
-  EXPECT_EQ(hk.maxMatching(), 4);
-  // All R nodes must be matched
-  for (int r = 0; r < 4; ++r) EXPECT_NE(hk.match_r[r], -1);
-  // Exactly one L node is free
-  int freeCount = 0;
-  for (int l = 0; l < 5; ++l) if (hk.match_l[l] == -1) ++freeCount;
-  EXPECT_EQ(freeCount, 1);
-}
-
-// ---------------------------------------------------------------------------
 // Test: sieve correctness
 // ---------------------------------------------------------------------------
 TEST(Sieve, PrimesBelow100) {
@@ -795,12 +991,17 @@ TEST(ClassifyBoard, Board5x4_BruteForce) {
 // Main
 // ===========================================================================
 int main(int argc, char** argv) {
+  // Initialize in this order so each library consumes only its own flags.
+  benchmark::Initialize(&argc, argv);   // strips --benchmark_* flags
+  testing::InitGoogleTest(&argc, argv); // strips --gtest_* flags
   google::InitGoogleLogging(argv[0]);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
   FLAGS_logtostderr = 1;
 
-  testing::InitGoogleTest(&argc, argv);
   auto res = RUN_ALL_TESTS();
+  if (res == 0) {
+    benchmark::RunSpecifiedBenchmarks();
+  }
+
   if (argc <= 1 || std::string(argv[1]) != "solve") {
     return res;
   }

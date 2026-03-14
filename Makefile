@@ -32,6 +32,10 @@ prime_number_gen_test.bin: prime_number_gen_test.cc prime_number_gen.cc
 clean:
 	rm -f *.bin
 
+# 2026-03.bin requires -lbenchmark for the HopcroftKarp benchmarks
+2026-03.bin: 2026-03.cc
+	g++ $< -O3 $(GCC_FLAGS) $(CPP_LIBS) -lbenchmark -o $@
+
 test: 2025-12.bin 2026-03.bin
 	./2025-12.bin
 	./2026-03.bin
