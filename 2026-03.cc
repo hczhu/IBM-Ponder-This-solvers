@@ -36,6 +36,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <omp.h>
 #include <queue>
 #include <span>
 #include <string>
@@ -669,14 +670,20 @@ Counts classifyBoard(int N, int M, int64_t p, int64_t q, int s) {
 // Solve: sum over all primes s in S
 // ---------------------------------------------------------------------------
 Counts solve(int N, int M, int64_t p, int64_t q, int primeLimit) {
-  Counts total;
-  for (int s : primesBelow(primeLimit)) {
+  auto primes = primesBelow(primeLimit);
+  long long totalA = 0, totalB = 0;
+  // schedule(dynamic) because runtime varies across primes (fewer removals =>
+  // larger graph => more work), so static chunk assignment would leave some
+  // threads idle while others finish the heavy large-prime cases.
+  #pragma omp parallel for reduction(+:totalA,totalB) schedule(dynamic)
+  for (int i = 0; i < (int)primes.size(); ++i) {
+    const int s = primes[i];
     auto c = classifyBoard(N, M, p, q, s);
-    total.A += c.A;
-    total.B += c.B;
+    totalA += c.A;
+    totalB += c.B;
     LOG(INFO) << "s=" << s << " A=" << c.A << " B=" << c.B;
   }
-  return total;
+  return {totalA, totalB};
 }
 
 // ===========================================================================
@@ -1042,7 +1049,7 @@ int main(int argc, char** argv) {
   FLAGS_logtostderr = 1;
 
   auto res = RUN_ALL_TESTS();
-  if (res == 0) {
+  if (res == 0 && argc <= 1) {
     benchmark::RunSpecifiedBenchmarks();
   }
 
@@ -1050,13 +1057,15 @@ int main(int argc, char** argv) {
     return res;
   }
 
-  LOG(INFO) << "Solving main puzzle: N=M=157, p=419, q=211, primes < 100";
-  auto main_ans = solve(157, 157, 419, 211, 100);
-  std::cout << "Main: A=" << main_ans.A << " B=" << main_ans.B << std::endl;
-
-  LOG(INFO) << "Solving bonus: N=M=1557, p=419, q=211, primes < 500";
-  auto bonus_ans = solve(1557, 1557, 419, 211, 500);
-  std::cout << "Bonus: A=" << bonus_ans.A << " B=" << bonus_ans.B << std::endl;
-
+  if (argc < 3 || std::string(argv[2]) == "main") {
+    LOG(INFO) << "Solving main puzzle: N=M=157, p=419, q=211, primes < 100";
+    auto main_ans = solve(157, 157, 419, 211, 100);
+    std::cout << "Main: " << main_ans.A << " " << main_ans.B << std::endl;
+  }
+  if (argc < 3 || std::string(argv[2]) == "bonus") {
+    LOG(INFO) << "Solving bonus: N=M=1557, p=419, q=211, primes < 500";
+    auto bonus_ans = solve(1557, 1557, 419, 211, 500);
+    std::cout << "Bonus: " << bonus_ans.A << " " << bonus_ans.B << std::endl;
+  }
   return res;
 }
