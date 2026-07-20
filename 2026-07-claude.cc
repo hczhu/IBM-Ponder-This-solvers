@@ -27,19 +27,25 @@
        makes the matching perfect.
     3. An n!-permutation bruteForce() cross-checks the solver for small n
        in tests.
+
+  C++20 features used: std::jthread (auto-joining threads), ranges/views,
+  std::span, std::string_view over argv, [[nodiscard]]. fmt::print stands
+  in for C++23 std::print (GCC 11 ships neither std::format nor std::print).
 */
 
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <iostream>
 #include <limits>
 #include <numeric>
 #include <omp.h>
-#include <string>
+#include <ranges>
+#include <span>
+#include <string_view>
 #include <thread>
 #include <vector>
 
+#include <fmt/core.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -50,8 +56,8 @@
 // `stamp` mark values visited in this call, so the caller passes a fresh
 // stamp each call and never needs to clear the table.
 // ---------------------------------------------------------------------------
-int rhoLength(int64_t a, int64_t b, int p, std::vector<int>& lastSeen,
-              int stamp) {
+[[nodiscard]] int rhoLength(int64_t a, int64_t b, int p,
+                            std::vector<int>& lastSeen, int stamp) {
   int64_t x = 0;
   int steps = 0;
   while (lastSeen[x] != stamp) {
@@ -66,24 +72,25 @@ int rhoLength(int64_t a, int64_t b, int p, std::vector<int>& lastSeen,
 // Full f matrix for heroes/villains 1..n, stored row-major with stride n:
 // f[(a-1)*n + (b-1)] = f(a, b). Rows are partitioned across threads.
 // ---------------------------------------------------------------------------
-std::vector<int> fMatrix(int n, int p) {
+[[nodiscard]] std::vector<int> fMatrix(int n, int p) {
   std::vector<int> f(static_cast<size_t>(n) * n);
   const int numThreads = std::max(1, std::min(n, omp_get_max_threads()));
-  std::vector<std::thread> threads;
-  for (int tid = 0; tid < numThreads; ++tid) {
-    threads.emplace_back([&f, n, p, numThreads, tid] {
-      std::vector<int> lastSeen(p, -1);
-      int stamp = 0;
-      for (int a = 1 + tid; a <= n; a += numThreads) {
-        for (int b = 1; b <= n; ++b) {
-          f[static_cast<size_t>(a - 1) * n + (b - 1)] =
-              rhoLength(a, b, p, lastSeen, stamp++);
+  {
+    // std::jthread joins on destruction, so leaving this scope is the
+    // synchronization point.
+    std::vector<std::jthread> workers;
+    for (int tid = 0; tid < numThreads; ++tid) {
+      workers.emplace_back([&f, n, p, numThreads, tid] {
+        std::vector<int> lastSeen(p, -1);
+        int stamp = 0;
+        for (int a = 1 + tid; a <= n; a += numThreads) {
+          for (const int b : std::views::iota(1, n + 1)) {
+            f[static_cast<size_t>(a - 1) * n + (b - 1)] =
+                rhoLength(a, b, p, lastSeen, stamp++);
+          }
         }
-      }
-    });
-  }
-  for (auto& t : threads) {
-    t.join();
+      });
+    }
   }
   return f;
 }
@@ -126,10 +133,10 @@ class IncrementalMatcher {
   explicit IncrementalMatcher(int n)
       : adj_(2 * n), match_(2 * n, -1), visited_(2 * n, -1) {}
 
-  int matchedCount() const { return matched_; }
+  [[nodiscard]] int matchedCount() const { return matched_; }
 
   // Inserts the edge (u, v) and returns true iff the matching grew.
-  bool addEdge(int u, int v) {
+  [[nodiscard]] bool addEdge(int u, int v) {
     const int hero = 2 * u;
     const int villain = 2 * v + 1;
     adj_[hero].push_back(villain);
@@ -184,18 +191,21 @@ class IncrementalMatcher {
 // insertion first makes the matching perfect. In practice only the top
 // O(n log n) edges are inserted before that happens.
 // ---------------------------------------------------------------------------
-int heroVillainValue(const std::vector<int>& f, int stride, int n) {
+[[nodiscard]] int heroVillainValue(const std::vector<int>& f, int stride,
+                                   int n) {
+  // A bounds-carrying view (std::span) of row a's first n entries.
+  const auto row = [&f, stride, n](int a) {
+    return std::span(f).subspan(static_cast<size_t>(a) * stride, n);
+  };
   int maxF = 0;
-  for (int a = 0; a < n; ++a) {
-    for (int b = 0; b < n; ++b) {
-      maxF = std::max(maxF, f[static_cast<size_t>(a) * stride + b]);
-    }
+  for (const int a : std::views::iota(0, n)) {
+    maxF = std::max(maxF, std::ranges::max(row(a)));
   }
   // Bucket the edges by f value (counting sort); f(a, b) >= 1 always.
   std::vector<std::vector<std::pair<int, int>>> edgesByValue(maxF + 1);
-  for (int a = 0; a < n; ++a) {
-    for (int b = 0; b < n; ++b) {
-      edgesByValue[f[static_cast<size_t>(a) * stride + b]].emplace_back(a, b);
+  for (const int a : std::views::iota(0, n)) {
+    for (const int b : std::views::iota(0, n)) {
+      edgesByValue[row(a)[b]].emplace_back(a, b);
     }
   }
   IncrementalMatcher matcher(n);
@@ -210,17 +220,18 @@ int heroVillainValue(const std::vector<int>& f, int stride, int n) {
   return 0;
 }
 
-int bruteForce(const std::vector<int>& f, int stride, int n) {
+[[nodiscard]] int bruteForce(const std::vector<int>& f, int stride, int n) {
   std::vector<int> perm(n);
   std::iota(perm.begin(), perm.end(), 0);
   int best = 0;
   do {
-    int minF = std::numeric_limits<int>::max();
-    for (int a = 0; a < n; ++a) {
-      minF = std::min(minF, f[static_cast<size_t>(a) * stride + perm[a]]);
-    }
+    // The matching's min value as a lazy view pipeline.
+    const int minF = std::ranges::min(
+        std::views::iota(0, n) | std::views::transform([&](int a) {
+          return f[static_cast<size_t>(a) * stride + perm[a]];
+        }));
     best = std::max(best, minF);
-  } while (std::next_permutation(perm.begin(), perm.end()));
+  } while (std::ranges::next_permutation(perm).found);
   return best;
 }
 
@@ -231,8 +242,8 @@ void solveMain() {
   constexpr int kN = 611;
   constexpr int kP = 14411;
   const auto f = fMatrix(kN, kP);
-  std::cout << "==> Hero-villain value for n = " << kN << ", p = " << kP
-            << ": " << heroVillainValue(f, kN, kN) << std::endl;
+  fmt::print("==> Hero-villain value for n = {}, p = {}: {}\n", kN, kP,
+             heroVillainValue(f, kN, kN));
 }
 
 void solveBonus() {
@@ -241,33 +252,27 @@ void solveBonus() {
   const auto f = fMatrix(kMaxN, kP);
   std::vector<int> value(kMaxN + 1, 0);
   std::atomic<int> nextN{2};
-  const int numThreads = std::max(1, omp_get_max_threads());
-  std::vector<std::thread> threads;
-  for (int tid = 0; tid < numThreads; ++tid) {
-    threads.emplace_back([&f, &value, &nextN] {
-      while (true) {
-        const int n = nextN.fetch_add(1);
-        if (n > kMaxN) {
-          break;
+  {
+    // Worker jthreads pull n values dynamically; all join at scope exit.
+    const int numThreads = std::max(1, omp_get_max_threads());
+    std::vector<std::jthread> workers;
+    for (int tid = 0; tid < numThreads; ++tid) {
+      workers.emplace_back([&f, &value, &nextN] {
+        for (int n = nextN.fetch_add(1); n <= kMaxN; n = nextN.fetch_add(1)) {
+          value[n] = heroVillainValue(f, kMaxN, n);
         }
-        value[n] = heroVillainValue(f, kMaxN, n);
-      }
-    });
-  }
-  for (auto& t : threads) {
-    t.join();
-  }
-  int bestN = 2;
-  for (int n = 2; n <= kMaxN; ++n) {
-    if (value[n] > value[bestN]) {
-      bestN = n;
+      });
     }
   }
-  std::cout << "==> Bonus: optimal n for p = " << kP << " is " << bestN
-            << " with hero-villain value " << value[bestN] << std::endl;
-  for (int n = 2; n <= kMaxN; ++n) {
-    if (n != bestN && value[n] == value[bestN]) {
-      std::cout << "    (tie: n = " << n << ")" << std::endl;
+  // value[0] and value[1] stay 0 (< any real value), so max_element over
+  // the whole vector returns the smallest optimal n.
+  const auto bestIt = std::ranges::max_element(value);
+  const auto bestN = bestIt - value.begin();
+  fmt::print("==> Bonus: optimal n for p = {} is {} with hero-villain value {}\n",
+             kP, bestN, *bestIt);
+  for (const int n : std::views::iota(2, kMaxN + 1)) {
+    if (n != bestN && value[n] == *bestIt) {
+      fmt::print("    (tie: n = {})\n", n);
     }
   }
 }
@@ -284,9 +289,9 @@ int main(int argc, char** argv) {
   }
   bool doSolve = false;
   bool doBonus = false;
-  for (int i = 1; i < argc; ++i) {
-    doSolve |= std::string(argv[i]) == "solve";
-    doBonus |= std::string(argv[i]) == "bonus";
+  for (const std::string_view arg : std::span(argv + 1, argc - 1)) {
+    doSolve |= arg == "solve";
+    doBonus |= arg == "bonus";
   }
   if (doSolve) {
     solveMain();
