@@ -223,6 +223,12 @@ int heroVillainValue(const std::vector<int>& f, int stride, int n) {
 // matching size and leaving its endpoint free, so (u, v) can then be
 // matched directly.
 //
+// Heroes and villains share one id space: hero u is node 2*u and villain v
+// is node 2*v + 1, which lets a single search() serve both sides. A node of
+// parity P has a partner of parity 1-P whose neighbors have parity P again,
+// so a search never leaves the side it started on; the searches from the
+// two endpoints of a new edge touch disjoint ids and share visited_.
+//
 // An insertion costs O(V + E) worst case, but the solver stops as soon as
 // the matching becomes perfect, which happens after inserting only the top
 // O(n log n) edges in practice.
@@ -230,75 +236,54 @@ int heroVillainValue(const std::vector<int>& f, int stride, int n) {
 class IncrementalMatcher {
  public:
   explicit IncrementalMatcher(int n)
-      : adjLeft_(n),
-        adjRight_(n),
-        matchLeft_(n, -1),
-        matchRight_(n, -1),
-        visitedLeft_(n, -1),
-        visitedRight_(n, -1) {}
+      : adj_(2 * n), match_(2 * n, -1), visited_(2 * n, -1) {}
 
   int matchedCount() const { return matched_; }
 
   // Inserts the edge (u, v) and returns true iff the matching grew.
   bool addEdge(int u, int v) {
-    adjLeft_[u].push_back(v);
-    adjRight_[v].push_back(u);
+    const int hero = 2 * u;
+    const int villain = 2 * v + 1;
+    adj_[hero].push_back(villain);
+    adj_[villain].push_back(hero);
     ++stamp_;
     // A failed second search needs no rollback: the flips done by a
     // successful first search only shuffle partners along an alternating
     // path, so the matching stays valid, maximum, and of the same size.
-    if (!leftSearch(u) || !rightSearch(v)) {
+    if (!search(hero) || !search(villain)) {
       return false;
     }
-    matchLeft_[u] = v;
-    matchRight_[v] = u;
+    match_[hero] = villain;
+    match_[villain] = hero;
     ++matched_;
     return true;
   }
 
  private:
-  // Frees hero `l` by shifting matched partners along an alternating path
-  // ending at a free hero. Returns false if no such path exists.
-  bool leftSearch(int l) {
-    visitedLeft_[l] = stamp_;
-    if (matchLeft_[l] == -1) {
+  // Frees `node` by shifting matched partners along an alternating path
+  // ending at a free node on the same side. Returns false if no such path
+  // exists.
+  bool search(int node) {
+    visited_[node] = stamp_;
+    if (match_[node] == -1) {
       return true;
     }
-    const int r = matchLeft_[l];
-    for (const int l2 : adjRight_[r]) {
-      // (l2, r) is an unmatched edge for every l2 != l, and l is visited.
-      if (visitedLeft_[l2] != stamp_ && leftSearch(l2)) {
-        matchLeft_[l2] = r;
-        matchRight_[r] = l2;
-        matchLeft_[l] = -1;
+    const int partner = match_[node];
+    for (const int next : adj_[partner]) {
+      // (next, partner) is an unmatched edge for every next != node, and
+      // node is already visited.
+      if (visited_[next] != stamp_ && search(next)) {
+        match_[next] = partner;
+        match_[partner] = next;
+        match_[node] = -1;
         return true;
       }
     }
     return false;
   }
 
-  // Frees villain `r` by shifting matched partners along an alternating
-  // path ending at a free villain. Returns false if no such path exists.
-  bool rightSearch(int r) {
-    visitedRight_[r] = stamp_;
-    if (matchRight_[r] == -1) {
-      return true;
-    }
-    const int l = matchRight_[r];
-    for (const int r2 : adjLeft_[l]) {
-      if (visitedRight_[r2] != stamp_ && rightSearch(r2)) {
-        matchRight_[r2] = l;
-        matchLeft_[l] = r2;
-        matchRight_[r] = -1;
-        return true;
-      }
-    }
-    return false;
-  }
-
-  std::vector<std::vector<int>> adjLeft_, adjRight_;
-  std::vector<int> matchLeft_, matchRight_;
-  std::vector<int> visitedLeft_, visitedRight_;
+  std::vector<std::vector<int>> adj_;
+  std::vector<int> match_, visited_;
   int stamp_ = 0;
   int matched_ = 0;
 };
