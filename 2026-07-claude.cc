@@ -25,9 +25,9 @@
        two independent alternating-path searches from the endpoints of the
        new edge. The answer is the f value of the edge whose insertion first
        makes the matching perfect.
-    3. Cross-checks in tests: a binary-search-over-thresholds solver with
-       Hopcroft-Karp feasibility checks, and an n!-permutation bruteForce()
-       for small n.
+    3. Cross-checks in tests: a binary-search-over-thresholds solver that
+       rebuilds the matching from scratch per threshold, and an
+       n!-permutation bruteForce() for small n.
 */
 
 #include <algorithm>
@@ -37,7 +37,6 @@
 #include <limits>
 #include <numeric>
 #include <omp.h>
-#include <queue>
 #include <string>
 #include <thread>
 #include <vector>
@@ -91,130 +90,23 @@ std::vector<int> fMatrix(int n, int p) {
 }
 
 // ---------------------------------------------------------------------------
-// Hopcroft-Karp maximum bipartite matching.
-// ---------------------------------------------------------------------------
-class BipartiteMatcher {
- public:
-  BipartiteMatcher(int numLeft, int numRight)
-      : numLeft_(numLeft), numRight_(numRight), adj_(numLeft) {}
-
-  void addEdge(int left, int right) { adj_[left].push_back(right); }
-
-  int maxMatchingSize() {
-    matchLeft_.assign(numLeft_, -1);
-    matchRight_.assign(numRight_, -1);
-    dist_.assign(numLeft_, 0);
-    int matched = 0;
-    while (bfs()) {
-      for (int u = 0; u < numLeft_; ++u) {
-        if (matchLeft_[u] == -1 && dfs(u)) {
-          ++matched;
-        }
-      }
-    }
-    return matched;
-  }
-
- private:
-  static constexpr int kInf = 1 << 29;
-
-  bool bfs() {
-    std::queue<int> queue;
-    for (int u = 0; u < numLeft_; ++u) {
-      if (matchLeft_[u] == -1) {
-        dist_[u] = 0;
-        queue.push(u);
-      } else {
-        dist_[u] = kInf;
-      }
-    }
-    bool foundAugmentingPath = false;
-    while (!queue.empty()) {
-      const int u = queue.front();
-      queue.pop();
-      for (const int v : adj_[u]) {
-        const int w = matchRight_[v];
-        if (w == -1) {
-          foundAugmentingPath = true;
-        } else if (dist_[w] == kInf) {
-          dist_[w] = dist_[u] + 1;
-          queue.push(w);
-        }
-      }
-    }
-    return foundAugmentingPath;
-  }
-
-  bool dfs(int u) {
-    for (const int v : adj_[u]) {
-      const int w = matchRight_[v];
-      if (w == -1 || (dist_[w] == dist_[u] + 1 && dfs(w))) {
-        matchLeft_[u] = v;
-        matchRight_[v] = u;
-        return true;
-      }
-    }
-    dist_[u] = kInf;
-    return false;
-  }
-
-  int numLeft_, numRight_;
-  std::vector<std::vector<int>> adj_;
-  std::vector<int> matchLeft_, matchRight_, dist_;
-};
-
-// ---------------------------------------------------------------------------
-// Bottleneck assignment: max over perfect matchings of the min f in the
-// matching. f is row-major with the given stride; the top-left n x n
-// submatrix is used (heroes/villains 1..n).
-// ---------------------------------------------------------------------------
-bool perfectMatchingExists(const std::vector<int>& f, int stride, int n,
-                           int minValue) {
-  BipartiteMatcher matcher(n, n);
-  for (int a = 0; a < n; ++a) {
-    const int* row = f.data() + static_cast<size_t>(a) * stride;
-    for (int b = 0; b < n; ++b) {
-      if (row[b] >= minValue) {
-        matcher.addEdge(a, b);
-      }
-    }
-  }
-  return matcher.maxMatchingSize() == n;
-}
-
-int heroVillainValue(const std::vector<int>& f, int stride, int n) {
-  std::vector<int> vals;
-  vals.reserve(static_cast<size_t>(n) * n);
-  for (int a = 0; a < n; ++a) {
-    for (int b = 0; b < n; ++b) {
-      vals.push_back(f[static_cast<size_t>(a) * stride + b]);
-    }
-  }
-  std::sort(vals.begin(), vals.end());
-  vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
-  // The threshold vals[0] admits all n^2 edges, so it is always feasible.
-  // Find the largest feasible threshold.
-  size_t lo = 0;
-  size_t hi = vals.size() - 1;
-  while (lo < hi) {
-    const size_t mid = lo + (hi - lo + 1) / 2;
-    if (perfectMatchingExists(f, stride, n, vals[mid])) {
-      lo = mid;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return vals[lo];
-}
-
-// ---------------------------------------------------------------------------
-// Incremental bottleneck matcher: edges are inserted in decreasing f order
-// and a maximum matching is maintained after every insertion. Inserting
-// (u, v) can grow the matching by at most 1, and only via an augmenting path
-// that uses (u, v) itself: an augmenting path avoiding (u, v) would
-// contradict the maximality of the current matching. Such a path exists iff
-//   - some free hero reaches u along an alternating path (leftSearch), and
-//   - v reaches some free villain along an alternating path (rightSearch).
+// Incremental maximum bipartite matching between n heroes and n villains: a
+// maximum matching is maintained after every single-edge insertion, at
+// O(V + E) worst-case cost per insertion.
+//
+// Inserting (u, v) can grow the matching by at most 1, and only via an
+// augmenting path that uses (u, v) itself: an augmenting path avoiding
+// (u, v) would contradict the maximality of the current matching. Such a
+// path exists iff
+//   - some free hero reaches u along an alternating path, and
+//   - v reaches some free villain along an alternating path,
+// which two DFS calls decide directly. No BFS layering (as in
+// Hopcroft-Karp) is needed: shortest augmenting paths only matter for
+// Hopcroft-Karp's O(E*sqrt(V)) phase bound. By Berge's theorem a matching
+// is maximum iff no augmenting path exists at all, so augmenting along an
+// arbitrary augmenting path after each insertion keeps the matching
+// maximum.
+//
 // The two searches can run independently: if the current matching is
 // maximum, any left path and right path are automatically vertex-disjoint.
 // Otherwise, shortcutting at the first shared vertex would splice together
@@ -224,14 +116,11 @@ int heroVillainValue(const std::vector<int>& f, int stride, int n) {
 // matched directly.
 //
 // Heroes and villains share one id space: hero u is node 2*u and villain v
-// is node 2*v + 1, which lets a single search() serve both sides. A node of
-// parity P has a partner of parity 1-P whose neighbors have parity P again,
-// so a search never leaves the side it started on; the searches from the
-// two endpoints of a new edge touch disjoint ids and share visited_.
-//
-// An insertion costs O(V + E) worst case, but the solver stops as soon as
-// the matching becomes perfect, which happens after inserting only the top
-// O(n log n) edges in practice.
+// is node 2*v + 1, which lets a single search() serve both sides and a
+// single match_ array store both directions. A node of parity P has a
+// partner of parity 1-P whose neighbors have parity P again, so a search
+// never leaves the side it started on; the searches from the two endpoints
+// of a new edge touch disjoint ids and share visited_.
 // ---------------------------------------------------------------------------
 class IncrementalMatcher {
  public:
@@ -288,6 +177,57 @@ class IncrementalMatcher {
   int matched_ = 0;
 };
 
+// ---------------------------------------------------------------------------
+// Bottleneck assignment: max over perfect matchings of the min f in the
+// matching. f is row-major with the given stride; the top-left n x n
+// submatrix is used (heroes/villains 1..n).
+// ---------------------------------------------------------------------------
+bool perfectMatchingExists(const std::vector<int>& f, int stride, int n,
+                           int minValue) {
+  IncrementalMatcher matcher(n);
+  for (int a = 0; a < n; ++a) {
+    const int* row = f.data() + static_cast<size_t>(a) * stride;
+    for (int b = 0; b < n; ++b) {
+      if (row[b] >= minValue && matcher.addEdge(a, b) &&
+          matcher.matchedCount() == n) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int heroVillainValue(const std::vector<int>& f, int stride, int n) {
+  std::vector<int> vals;
+  vals.reserve(static_cast<size_t>(n) * n);
+  for (int a = 0; a < n; ++a) {
+    for (int b = 0; b < n; ++b) {
+      vals.push_back(f[static_cast<size_t>(a) * stride + b]);
+    }
+  }
+  std::sort(vals.begin(), vals.end());
+  vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
+  // The threshold vals[0] admits all n^2 edges, so it is always feasible.
+  // Find the largest feasible threshold.
+  size_t lo = 0;
+  size_t hi = vals.size() - 1;
+  while (lo < hi) {
+    const size_t mid = lo + (hi - lo + 1) / 2;
+    if (perfectMatchingExists(f, stride, n, vals[mid])) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return vals[lo];
+}
+
+// ---------------------------------------------------------------------------
+// Threshold-descending bottleneck solver: insert edges in decreasing f
+// order; the answer is the f value of the edge whose insertion first makes
+// the matching perfect. In practice only the top O(n log n) edges are
+// inserted before that happens.
+// ---------------------------------------------------------------------------
 int heroVillainValueIncremental(const std::vector<int>& f, int stride,
                                 int n) {
   int maxF = 0;
@@ -420,28 +360,29 @@ TEST(RhoLength, PuzzleExampleValues) {
   EXPECT_EQ(rhoLength(5, 5, kP, lastSeen, stamp++), 14);
 }
 
-TEST(BipartiteMatcher, Basic) {
+TEST(IncrementalMatcher, Basic) {
   {
     // Perfect matching exists: 0-0, 1-1.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(1, 1);
-    EXPECT_EQ(m.maxMatchingSize(), 2);
+    IncrementalMatcher m(2);
+    EXPECT_TRUE(m.addEdge(0, 0));
+    EXPECT_TRUE(m.addEdge(1, 1));
+    EXPECT_EQ(m.matchedCount(), 2);
   }
   {
-    // Both left vertices only connect to right vertex 0.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(1, 0);
-    EXPECT_EQ(m.maxMatchingSize(), 1);
+    // Both heroes only connect to villain 0.
+    IncrementalMatcher m(2);
+    EXPECT_TRUE(m.addEdge(0, 0));
+    EXPECT_FALSE(m.addEdge(1, 0));
+    EXPECT_EQ(m.matchedCount(), 1);
   }
   {
-    // Augmenting path needed: 0 must give up vertex 0 to 1.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(0, 1);
-    m.addEdge(1, 0);
-    EXPECT_EQ(m.maxMatchingSize(), 2);
+    // Inserting (1, 0) augments along villain 1 - hero 0 - villain 0:
+    // hero 0 hands villain 0 over to hero 1 and takes villain 1.
+    IncrementalMatcher m(2);
+    EXPECT_TRUE(m.addEdge(0, 0));
+    EXPECT_FALSE(m.addEdge(0, 1));  // hero 0 is already matched
+    EXPECT_TRUE(m.addEdge(1, 0));
+    EXPECT_EQ(m.matchedCount(), 2);
   }
 }
 
