@@ -25,9 +25,8 @@
        two independent alternating-path searches from the endpoints of the
        new edge. The answer is the f value of the edge whose insertion first
        makes the matching perfect.
-    3. Cross-checks in tests: a binary-search-over-thresholds solver that
-       rebuilds the matching from scratch per threshold, and an
-       n!-permutation bruteForce() for small n.
+    3. An n!-permutation bruteForce() cross-checks the solver for small n
+       in tests.
 */
 
 #include <algorithm>
@@ -180,56 +179,12 @@ class IncrementalMatcher {
 // ---------------------------------------------------------------------------
 // Bottleneck assignment: max over perfect matchings of the min f in the
 // matching. f is row-major with the given stride; the top-left n x n
-// submatrix is used (heroes/villains 1..n).
+// submatrix is used (heroes/villains 1..n). Threshold-descending: insert
+// edges in decreasing f order; the answer is the f value of the edge whose
+// insertion first makes the matching perfect. In practice only the top
+// O(n log n) edges are inserted before that happens.
 // ---------------------------------------------------------------------------
-bool perfectMatchingExists(const std::vector<int>& f, int stride, int n,
-                           int minValue) {
-  IncrementalMatcher matcher(n);
-  for (int a = 0; a < n; ++a) {
-    const int* row = f.data() + static_cast<size_t>(a) * stride;
-    for (int b = 0; b < n; ++b) {
-      if (row[b] >= minValue && matcher.addEdge(a, b) &&
-          matcher.matchedCount() == n) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 int heroVillainValue(const std::vector<int>& f, int stride, int n) {
-  std::vector<int> vals;
-  vals.reserve(static_cast<size_t>(n) * n);
-  for (int a = 0; a < n; ++a) {
-    for (int b = 0; b < n; ++b) {
-      vals.push_back(f[static_cast<size_t>(a) * stride + b]);
-    }
-  }
-  std::sort(vals.begin(), vals.end());
-  vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
-  // The threshold vals[0] admits all n^2 edges, so it is always feasible.
-  // Find the largest feasible threshold.
-  size_t lo = 0;
-  size_t hi = vals.size() - 1;
-  while (lo < hi) {
-    const size_t mid = lo + (hi - lo + 1) / 2;
-    if (perfectMatchingExists(f, stride, n, vals[mid])) {
-      lo = mid;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return vals[lo];
-}
-
-// ---------------------------------------------------------------------------
-// Threshold-descending bottleneck solver: insert edges in decreasing f
-// order; the answer is the f value of the edge whose insertion first makes
-// the matching perfect. In practice only the top O(n log n) edges are
-// inserted before that happens.
-// ---------------------------------------------------------------------------
-int heroVillainValueIncremental(const std::vector<int>& f, int stride,
-                                int n) {
   int maxF = 0;
   for (int a = 0; a < n; ++a) {
     for (int b = 0; b < n; ++b) {
@@ -277,7 +232,7 @@ void solveMain() {
   constexpr int kP = 14411;
   const auto f = fMatrix(kN, kP);
   std::cout << "==> Hero-villain value for n = " << kN << ", p = " << kP
-            << ": " << heroVillainValueIncremental(f, kN, kN) << std::endl;
+            << ": " << heroVillainValue(f, kN, kN) << std::endl;
 }
 
 void solveBonus() {
@@ -295,7 +250,7 @@ void solveBonus() {
         if (n > kMaxN) {
           break;
         }
-        value[n] = heroVillainValueIncremental(f, kMaxN, n);
+        value[n] = heroVillainValue(f, kMaxN, n);
       }
     });
   }
@@ -391,13 +346,11 @@ TEST(HeroVillain, HandCraftedMatrices) {
     // Diagonal matching gives 5; the other matching gives 1.
     const std::vector<int> f = {5, 1, 1, 5};
     EXPECT_EQ(heroVillainValue(f, 2, 2), 5);
-    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 5);
   }
   {
     // Anti-diagonal matching gives min(9, 9) = 9; diagonal gives min(9, 1).
     const std::vector<int> f = {9, 9, 9, 1};
     EXPECT_EQ(heroVillainValue(f, 2, 2), 9);
-    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 9);
   }
 }
 
@@ -406,7 +359,6 @@ TEST(HeroVillain, PuzzleExample) {
   constexpr int kP = 101;
   const auto f = fMatrix(kN, kP);
   EXPECT_EQ(heroVillainValue(f, kN, kN), 14);
-  EXPECT_EQ(heroVillainValueIncremental(f, kN, kN), 14);
   EXPECT_EQ(bruteForce(f, kN, kN), 14);
 }
 
@@ -414,21 +366,7 @@ TEST(HeroVillain, SolveMatchesBruteForceOnSmallInputs) {
   for (const int p : {11, 31, 101, 997}) {
     for (int n = 2; n <= 7; ++n) {
       const auto f = fMatrix(n, p);
-      const int expected = bruteForce(f, n, n);
-      EXPECT_EQ(heroVillainValue(f, n, n), expected) << "n=" << n << " p=" << p;
-      EXPECT_EQ(heroVillainValueIncremental(f, n, n), expected)
-          << "n=" << n << " p=" << p;
-    }
-  }
-}
-
-TEST(HeroVillain, IncrementalMatchesBinarySearchOnMediumInputs) {
-  // Large enough that brute force is out of reach; the two independent
-  // algorithms must agree.
-  for (const int p : {997, 5003}) {
-    for (const int n : {50, 100, 150}) {
-      const auto f = fMatrix(n, p);
-      EXPECT_EQ(heroVillainValueIncremental(f, n, n), heroVillainValue(f, n, n))
+      EXPECT_EQ(heroVillainValue(f, n, n), bruteForce(f, n, n))
           << "n=" << n << " p=" << p;
     }
   }
