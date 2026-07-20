@@ -64,19 +64,6 @@ int rhoLength(int64_t a, int64_t b, int p, std::vector<int>& lastSeen,
   return steps;
 }
 
-TEST(RhoLength, PuzzleExampleValues) {
-  // From the puzzle statement: for p = 101 the pairings
-  // (1,3), (2,1), (3,4), (4,2), (5,5) yield 14, 18, 19, 22, 14.
-  constexpr int kP = 101;
-  std::vector<int> lastSeen(kP, -1);
-  int stamp = 0;
-  EXPECT_EQ(rhoLength(1, 3, kP, lastSeen, stamp++), 14);
-  EXPECT_EQ(rhoLength(2, 1, kP, lastSeen, stamp++), 18);
-  EXPECT_EQ(rhoLength(3, 4, kP, lastSeen, stamp++), 19);
-  EXPECT_EQ(rhoLength(4, 2, kP, lastSeen, stamp++), 22);
-  EXPECT_EQ(rhoLength(5, 5, kP, lastSeen, stamp++), 14);
-}
-
 // ---------------------------------------------------------------------------
 // Full f matrix for heroes/villains 1..n, stored row-major with stride n:
 // f[(a-1)*n + (b-1)] = f(a, b). Rows are partitioned across threads.
@@ -175,31 +162,6 @@ class BipartiteMatcher {
   std::vector<std::vector<int>> adj_;
   std::vector<int> matchLeft_, matchRight_, dist_;
 };
-
-TEST(BipartiteMatcher, Basic) {
-  {
-    // Perfect matching exists: 0-0, 1-1.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(1, 1);
-    EXPECT_EQ(m.maxMatchingSize(), 2);
-  }
-  {
-    // Both left vertices only connect to right vertex 0.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(1, 0);
-    EXPECT_EQ(m.maxMatchingSize(), 1);
-  }
-  {
-    // Augmenting path needed: 0 must give up vertex 0 to 1.
-    BipartiteMatcher m(2, 2);
-    m.addEdge(0, 0);
-    m.addEdge(0, 1);
-    m.addEdge(1, 0);
-    EXPECT_EQ(m.maxMatchingSize(), 2);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Bottleneck assignment: max over perfect matchings of the min f in the
@@ -382,54 +344,6 @@ int bruteForce(const std::vector<int>& f, int stride, int n) {
   return best;
 }
 
-TEST(HeroVillain, HandCraftedMatrices) {
-  {
-    // Diagonal matching gives 5; the other matching gives 1.
-    const std::vector<int> f = {5, 1, 1, 5};
-    EXPECT_EQ(heroVillainValue(f, 2, 2), 5);
-    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 5);
-  }
-  {
-    // Anti-diagonal matching gives min(9, 9) = 9; diagonal gives min(9, 1).
-    const std::vector<int> f = {9, 9, 9, 1};
-    EXPECT_EQ(heroVillainValue(f, 2, 2), 9);
-    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 9);
-  }
-}
-
-TEST(HeroVillain, PuzzleExample) {
-  constexpr int kN = 5;
-  constexpr int kP = 101;
-  const auto f = fMatrix(kN, kP);
-  EXPECT_EQ(heroVillainValue(f, kN, kN), 14);
-  EXPECT_EQ(heroVillainValueIncremental(f, kN, kN), 14);
-  EXPECT_EQ(bruteForce(f, kN, kN), 14);
-}
-
-TEST(HeroVillain, SolveMatchesBruteForceOnSmallInputs) {
-  for (const int p : {11, 31, 101, 997}) {
-    for (int n = 2; n <= 7; ++n) {
-      const auto f = fMatrix(n, p);
-      const int expected = bruteForce(f, n, n);
-      EXPECT_EQ(heroVillainValue(f, n, n), expected) << "n=" << n << " p=" << p;
-      EXPECT_EQ(heroVillainValueIncremental(f, n, n), expected)
-          << "n=" << n << " p=" << p;
-    }
-  }
-}
-
-TEST(HeroVillain, IncrementalMatchesBinarySearchOnMediumInputs) {
-  // Large enough that brute force is out of reach; the two independent
-  // algorithms must agree.
-  for (const int p : {997, 5003}) {
-    for (const int n : {50, 100, 150}) {
-      const auto f = fMatrix(n, p);
-      EXPECT_EQ(heroVillainValueIncremental(f, n, n), heroVillainValue(f, n, n))
-          << "n=" << n << " p=" << p;
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Solvers
 // ---------------------------------------------------------------------------
@@ -501,4 +415,95 @@ int main(int argc, char** argv) {
     solveBonus();
   }
   return res;
+}
+
+// ---------------------------------------------------------------------------
+// Tests. gtest registers TEST blocks at static-initialization time, so
+// defining them after main() changes nothing about what RUN_ALL_TESTS()
+// executes.
+// ---------------------------------------------------------------------------
+TEST(RhoLength, PuzzleExampleValues) {
+  // From the puzzle statement: for p = 101 the pairings
+  // (1,3), (2,1), (3,4), (4,2), (5,5) yield 14, 18, 19, 22, 14.
+  constexpr int kP = 101;
+  std::vector<int> lastSeen(kP, -1);
+  int stamp = 0;
+  EXPECT_EQ(rhoLength(1, 3, kP, lastSeen, stamp++), 14);
+  EXPECT_EQ(rhoLength(2, 1, kP, lastSeen, stamp++), 18);
+  EXPECT_EQ(rhoLength(3, 4, kP, lastSeen, stamp++), 19);
+  EXPECT_EQ(rhoLength(4, 2, kP, lastSeen, stamp++), 22);
+  EXPECT_EQ(rhoLength(5, 5, kP, lastSeen, stamp++), 14);
+}
+
+TEST(BipartiteMatcher, Basic) {
+  {
+    // Perfect matching exists: 0-0, 1-1.
+    BipartiteMatcher m(2, 2);
+    m.addEdge(0, 0);
+    m.addEdge(1, 1);
+    EXPECT_EQ(m.maxMatchingSize(), 2);
+  }
+  {
+    // Both left vertices only connect to right vertex 0.
+    BipartiteMatcher m(2, 2);
+    m.addEdge(0, 0);
+    m.addEdge(1, 0);
+    EXPECT_EQ(m.maxMatchingSize(), 1);
+  }
+  {
+    // Augmenting path needed: 0 must give up vertex 0 to 1.
+    BipartiteMatcher m(2, 2);
+    m.addEdge(0, 0);
+    m.addEdge(0, 1);
+    m.addEdge(1, 0);
+    EXPECT_EQ(m.maxMatchingSize(), 2);
+  }
+}
+
+TEST(HeroVillain, HandCraftedMatrices) {
+  {
+    // Diagonal matching gives 5; the other matching gives 1.
+    const std::vector<int> f = {5, 1, 1, 5};
+    EXPECT_EQ(heroVillainValue(f, 2, 2), 5);
+    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 5);
+  }
+  {
+    // Anti-diagonal matching gives min(9, 9) = 9; diagonal gives min(9, 1).
+    const std::vector<int> f = {9, 9, 9, 1};
+    EXPECT_EQ(heroVillainValue(f, 2, 2), 9);
+    EXPECT_EQ(heroVillainValueIncremental(f, 2, 2), 9);
+  }
+}
+
+TEST(HeroVillain, PuzzleExample) {
+  constexpr int kN = 5;
+  constexpr int kP = 101;
+  const auto f = fMatrix(kN, kP);
+  EXPECT_EQ(heroVillainValue(f, kN, kN), 14);
+  EXPECT_EQ(heroVillainValueIncremental(f, kN, kN), 14);
+  EXPECT_EQ(bruteForce(f, kN, kN), 14);
+}
+
+TEST(HeroVillain, SolveMatchesBruteForceOnSmallInputs) {
+  for (const int p : {11, 31, 101, 997}) {
+    for (int n = 2; n <= 7; ++n) {
+      const auto f = fMatrix(n, p);
+      const int expected = bruteForce(f, n, n);
+      EXPECT_EQ(heroVillainValue(f, n, n), expected) << "n=" << n << " p=" << p;
+      EXPECT_EQ(heroVillainValueIncremental(f, n, n), expected)
+          << "n=" << n << " p=" << p;
+    }
+  }
+}
+
+TEST(HeroVillain, IncrementalMatchesBinarySearchOnMediumInputs) {
+  // Large enough that brute force is out of reach; the two independent
+  // algorithms must agree.
+  for (const int p : {997, 5003}) {
+    for (const int n : {50, 100, 150}) {
+      const auto f = fMatrix(n, p);
+      EXPECT_EQ(heroVillainValueIncremental(f, n, n), heroVillainValue(f, n, n))
+          << "n=" << n << " p=" << p;
+    }
+  }
 }
