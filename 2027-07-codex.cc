@@ -48,6 +48,8 @@
 #include <limits>
 #include <numeric>
 #include <queue>
+#include <ranges>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -87,7 +89,10 @@ class OrbitTable {
 
   int size() const { return n_; }
   int modulus() const { return p_; }
-  int operator()(int a, int b) const { return weights_[index(a, b)]; }
+  std::span<const uint16_t> row(int a) const {
+    return {weights_.data() + size_t(a) * n_, size_t(n_)};
+  }
+  int operator()(int a, int b) const { return row(a)[b]; }
 
  private:
   size_t index(int a, int b) const { return size_t(a) * n_ + b; }
@@ -114,8 +119,8 @@ class HopcroftKarpThreshold {
   bool hasPerfectMatching() {
     int matching = 0;
     while (bfs()) {
-      std::fill(next_right_.begin(), next_right_.end(), 0);
-      for (int left = 0; left < n_; ++left) {
+      std::ranges::fill(next_right_, 0);
+      for (const int left : std::views::iota(0, n_)) {
         if (match_left_[left] == -1 && dfs(left)) {
           ++matching;
         }
@@ -130,7 +135,7 @@ class HopcroftKarpThreshold {
 
   bool bfs() {
     std::queue<int> queue;
-    for (int left = 0; left < n_; ++left) {
+    for (const int left : std::views::iota(0, n_)) {
       if (match_left_[left] == -1) {
         distance_[left] = 0;
         queue.push(left);
@@ -145,8 +150,9 @@ class HopcroftKarpThreshold {
       queue.pop();
       if (distance_[left] + 1 > nil_distance_) continue;
 
-      for (int right = 0; right < n_; ++right) {
-        if (table_(left, right) < threshold_) continue;
+      const auto weights = table_.row(left);
+      for (const int right : std::views::iota(0, n_)) {
+        if (weights[right] < threshold_) continue;
         const int next_left = match_right_[right];
         if (next_left == -1) {
           nil_distance_ = distance_[left] + 1;
@@ -160,8 +166,9 @@ class HopcroftKarpThreshold {
   }
 
   bool dfs(int left) {
+    const auto weights = table_.row(left);
     for (int& right = next_right_[left]; right < n_; ++right) {
-      if (table_(left, right) < threshold_) continue;
+      if (weights[right] < threshold_) continue;
       const int next_left = match_right_[right];
       if ((next_left == -1 && distance_[left] + 1 == nil_distance_) ||
           (next_left != -1 && distance_[next_left] == distance_[left] + 1 &&
@@ -218,11 +225,12 @@ class PrefixMatcher {
         seen_right_(words_),
         parent_right_(n_),
         queue_(n_) {
-    for (int left = 0; left < n_; ++left) {
-      for (int right = 0; right < n_; ++right) {
-        if (table(left, right) >= threshold) {
-          adjacency_[size_t(left) * words_ + right / 64] |=
-              uint64_t(1) << (right % 64);
+    for (const int left : std::views::iota(0, n_)) {
+      const auto weights = table.row(left);
+      auto bits = adjacencyRow(left);
+      for (const int right : std::views::iota(0, n_)) {
+        if (weights[right] >= threshold) {
+          bits[right / 64] |= uint64_t(1) << (right % 64);
         }
       }
     }
@@ -252,7 +260,7 @@ class PrefixMatcher {
  private:
   bool augment(int k) {
     std::fill(seen_left_.begin(), seen_left_.begin() + k, uint8_t(0));
-    std::fill(seen_right_.begin(), seen_right_.end(), uint64_t(0));
+    std::ranges::fill(seen_right_, uint64_t(0));
 
     int head = 0;
     int tail = 0;
@@ -271,9 +279,9 @@ class PrefixMatcher {
 
     while (head < tail) {
       const int left = queue_[head++];
-      const size_t row = size_t(left) * words_;
+      const auto row = adjacencyRow(left);
       for (int word = 0; word < active_words; ++word) {
-        uint64_t candidates = adjacency_[row + word] & ~seen_right_[word];
+        uint64_t candidates = row[word] & ~seen_right_[word];
         if (word + 1 == active_words) candidates &= tail_mask;
 
         while (candidates != 0) {
@@ -309,6 +317,10 @@ class PrefixMatcher {
     }
   }
 
+  std::span<uint64_t> adjacencyRow(int left) {
+    return {adjacency_.data() + size_t(left) * words_, size_t(words_)};
+  }
+
   int n_;
   int words_;
   std::vector<uint64_t> adjacency_;
@@ -339,10 +351,10 @@ static BonusResult bestPrefix(const OrbitTable& table) {
   }
 
   PrefixMatcher matcher(table, feasible);
-  return {feasible, matcher.perfectPrefixes(false)};
+  return {.value = feasible, .sizes = matcher.perfectPrefixes(false)};
 }
 
-static void printRanges(const std::vector<int>& values) {
+static void printRanges(std::span<const int> values) {
   for (size_t first = 0; first < values.size();) {
     size_t last = first;
     while (last + 1 < values.size() && values[last + 1] == values[last] + 1) {
@@ -376,7 +388,7 @@ static int bruteBottleneck(const OrbitTable& table, int n) {
       value = std::min(value, table(left, permutation[left]));
     }
     best = std::max(best, value);
-  } while (std::next_permutation(permutation.begin(), permutation.end()));
+  } while (std::ranges::next_permutation(permutation).found);
   return best;
 }
 
