@@ -23,10 +23,10 @@
   -------
   Edges whose weights are at least a threshold t form a bipartite graph.  The
   threshold is feasible exactly when the graph has a perfect matching.  This
-  predicate is monotone, so an integer binary search plus Hopcroft-Karp finds
-  the largest feasible t in O(log(p) * n^2 * sqrt(n)) worst-case time and O(n)
-  extra space (the weight matrix is scanned directly, avoiding adjacency-list
-  duplication).
+  predicate is monotone.  Sort and deduplicate the actual edge weights, then
+  binary-search that list with Hopcroft-Karp feasibility checks.  For d distinct
+  weights this costs O(n^2*log(n) + log(d)*n^2*sqrt(n)) worst-case time.  The
+  weight matrix is scanned directly, avoiding adjacency-list duplication.
 
   Bonus
   -----
@@ -37,12 +37,13 @@
   alternating-path search word-parallel.  A second monotone binary search finds
   the greatest threshold attained by any 1 < k < N, then one final pass returns
   every k attaining it.  The threshold graph uses O(N^2/64) extra words.
-  The worst-case matching work is O(log(p) * N^3/64), versus running an
+  The worst-case matching work is O(log(d) * N^3/64), versus running an
   independent O(k^2*sqrt(k)) matching for every k at every threshold.
 */
 
 #include <algorithm>
 #include <bit>
+#include <concepts>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -197,18 +198,42 @@ static bool feasibleExact(const OrbitTable& table, int n, int threshold) {
   return HopcroftKarpThreshold(table, n, threshold).hasPerfectMatching();
 }
 
-static int bottleneckValue(const OrbitTable& table, int n) {
-  int feasible = 0;
-  int infeasible = table.modulus() + 1;
+static std::vector<uint16_t> sortedEdgeValues(const OrbitTable& table, int n) {
+  std::vector<uint16_t> values;
+  values.reserve(size_t(n) * n);
+  for (const int left : std::views::iota(0, n)) {
+    const auto row = table.row(left).first(size_t(n));
+    values.insert(values.end(), row.begin(), row.end());
+  }
+  std::ranges::sort(values);
+  const auto duplicates = std::ranges::unique(values);
+  values.erase(duplicates.begin(), duplicates.end());
+  return values;
+}
+
+static int maximumFeasibleEdgeValue(
+    std::span<const uint16_t> sorted_values,
+    std::predicate<uint16_t> auto feasible_at) {
+  CHECK(!sorted_values.empty());
+  std::ptrdiff_t feasible = -1;
+  std::ptrdiff_t infeasible = std::ssize(sorted_values);
   while (infeasible - feasible > 1) {
-    const int middle = feasible + (infeasible - feasible) / 2;
-    if (feasibleExact(table, n, middle)) {
+    const std::ptrdiff_t middle = feasible + (infeasible - feasible) / 2;
+    if (feasible_at(sorted_values[middle])) {
       feasible = middle;
     } else {
       infeasible = middle;
     }
   }
-  return feasible;
+  CHECK_GE(feasible, 0);
+  return sorted_values[feasible];
+}
+
+static int bottleneckValue(const OrbitTable& table, int n) {
+  const auto values = sortedEdgeValues(table, n);
+  return maximumFeasibleEdgeValue(values, [&](uint16_t threshold) {
+    return feasibleExact(table, n, threshold);
+  });
 }
 
 // Maintains maximum matchings of every leading k by k threshold graph.  The
@@ -338,20 +363,14 @@ struct BonusResult {
 };
 
 static BonusResult bestPrefix(const OrbitTable& table) {
-  int feasible = 0;
-  int infeasible = table.modulus() + 1;
-  while (infeasible - feasible > 1) {
-    const int middle = feasible + (infeasible - feasible) / 2;
-    PrefixMatcher matcher(table, middle);
-    if (!matcher.perfectPrefixes(true).empty()) {
-      feasible = middle;
-    } else {
-      infeasible = middle;
-    }
-  }
+  const auto values = sortedEdgeValues(table, table.size());
+  const int value = maximumFeasibleEdgeValue(values, [&](uint16_t threshold) {
+    PrefixMatcher matcher(table, threshold);
+    return !matcher.perfectPrefixes(true).empty();
+  });
 
-  PrefixMatcher matcher(table, feasible);
-  return {.value = feasible, .sizes = matcher.perfectPrefixes(false)};
+  PrefixMatcher matcher(table, value);
+  return {.value = value, .sizes = matcher.perfectPrefixes(false)};
 }
 
 static void printRanges(std::span<const int> values) {
