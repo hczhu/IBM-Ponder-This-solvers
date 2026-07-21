@@ -34,8 +34,7 @@ GCC_FLAGS=$(CXXFLAGS)
 CPP_LIBS=$(LDLIBS)
 
 SRCS_CC := $(filter-out prime_number_gen.cc prime_number_gen_test.cc, $(wildcard *.cc))
-SRCS_CPP := $(wildcard *.cpp)
-BINS := $(SRCS_CC:.cc=.bin) $(SRCS_CPP:.cpp=.bin) prime_number_gen_test.bin
+BINS := $(SRCS_CC:.cc=.bin) prime_number_gen_test.bin
 
 all: $(BINS)
 
@@ -53,9 +52,6 @@ prime_number_gen_test.bin: prime_number_gen_test.cc prime_number_gen.cc
 	g++ $^ -O3 $(GCC_FLAGS) $(PLATFORM_LDFLAGS) -lglog -lgflags -lpthread -lgtest -lfmt -lbenchmark $(OMP_LDFLAGS) -o $@
 
 %.bin: %.cc
-	g++ $< -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
-
-%.bin: %.cpp
 	g++ $< -O3 $(GCC_FLAGS) $(CPP_LIBS) -o $@
 
 clean:
